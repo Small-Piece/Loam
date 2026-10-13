@@ -30,9 +30,12 @@ describe('release files', () => {
     expect(changelogEntry(changelog, '9.9.9')).toBeNull()
   })
 
-  it('has a 0.1.0 entry in the real CHANGELOG.md', () => {
+  it('has entries for 0.1.0 and 0.1.1 in the real CHANGELOG.md', () => {
     const real = readFileSync(fileURLToPath(new URL('../CHANGELOG.md', import.meta.url)), 'utf8')
     expect(changelogEntry(real, '0.1.0')).toContain('### Privacy')
+    expect(changelogEntry(real, '0.1.1')).toBe(
+      '### Fixed\n\n- The Website button in About now opens the right page.',
+    )
   })
 
   it('expects tags of the form v<version> and writes sha256sum lines', () => {

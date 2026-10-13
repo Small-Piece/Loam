@@ -2,6 +2,12 @@
 
 All notable changes to Loam are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 0.1.1
+
+### Fixed
+
+- The Website button in About now opens the right page.
+
 ## 0.1.0 — first public release
 
 Loam is a free, open-source desktop app for indie developers who make games creatively and artistically. It keeps your references, your game's intent and your learning in one place, as files you own.

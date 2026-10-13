@@ -31,7 +31,13 @@ test('About shows the version, the MIT license, the links and the third-party no
 
   await page.getByRole('button', { name: 'About Loam' }).click()
   const about = page.getByRole('dialog', { name: 'About Loam' })
-  await expect(about.getByRole('heading', { name: 'Loam 0.1.0' })).toBeVisible()
+  await expect(about.getByRole('heading', { name: 'Loam 0.1.1' })).toBeVisible()
+  // The public repository is "Loam" with a capital L; GitHub Pages paths are case-sensitive.
+  const reply = (await page.evaluate(() => window.loam.invoke('app:about', {}))) as {
+    data: { websiteUrl: string; repositoryUrl: string }
+  }
+  expect(reply.data.websiteUrl).toBe('https://small-piece.github.io/Loam/')
+  expect(reply.data.repositoryUrl).toBe('https://github.com/Small-Piece/Loam')
   await expect(about.getByTestId('about-license')).toContainText('MIT License')
   await expect(about.getByRole('button', { name: 'Website' })).toBeVisible()
   await expect(about.getByRole('button', { name: 'Source code' })).toBeVisible()

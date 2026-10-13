@@ -8,7 +8,7 @@ Loam is a free, open-source desktop app for indie developers who make games crea
 
 ## Download
 
-**[Download the latest release for Windows](https://github.com/Small-Piece/loam/releases/latest)** (the file named `Loam Setup <version>.exe`).
+**[Download the latest release for Windows](https://github.com/Small-Piece/Loam/releases/latest)** (the file named `Loam Setup <version>.exe`).
 
 The installer is not code-signed yet. The first time you run it, Windows SmartScreen may say "Windows protected your PC". Choose **More info**, then **Run anyway**. Each release lists the installer's SHA-256 checksum, so you can check the file you downloaded:
 

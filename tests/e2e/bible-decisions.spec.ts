@@ -132,7 +132,12 @@ test('decision log, pillar check, idea board, promote with undo and review', asy
   const vault = join(game, 'bible')
   const { app, page } = await launchApp(join(root, 'appdata'))
   await createHorrorVault(app, page, game)
-  const pillarFile = readdirSync(join(vault, 'pillars'))[0] ?? ''
+  // Wait for the first pillar's save to finish: until then the folder may hold only the
+  // atomic save's temporary file (.<name>.<hex>.um-tmp), or nothing.
+  const pillarMarkdown = () =>
+    readdirSync(join(vault, 'pillars')).find((name) => name.endsWith('.md')) ?? ''
+  await expect.poll(pillarMarkdown).not.toBe('')
+  const pillarFile = pillarMarkdown()
   const pillarId = frontValue(read(join(vault, 'pillars', pillarFile)), 'id')
 
   // A new decision: dated today, decided, the kit's body template, no pillar yet.

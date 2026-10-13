@@ -66,8 +66,8 @@ function codeRoot(): string {
 }
 
 const WINDOW_SIZE = { width: 1280, height: 820 }
-const REPOSITORY_URL = 'https://github.com/Small-Piece/loam'
-const WEBSITE_URL = 'https://small-piece.github.io/loam/'
+const REPOSITORY_URL = 'https://github.com/Small-Piece/Loam'
+const WEBSITE_URL = 'https://small-piece.github.io/Loam/'
 
 let log: MainLog | null = null
 let mainWindow: BrowserWindow | null = null
