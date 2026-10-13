@@ -24,6 +24,8 @@ Loam runs on Windows 10 and 11 (64-bit).
 - **No telemetry.** No accounts, no analytics, nothing about you or your work is sent anywhere.
 - **Off by default.** The optional helpers below stay off until you turn them on, and nothing goes online unless you ask.
 
+The details are in the [privacy statement](docs/privacy.md).
+
 ## What it does
 
 - **Library.** Drop or paste images, then give them titles, notes, sources and tags. Filter by tags and search the text.
@@ -68,7 +70,11 @@ pnpm build          # the Windows installer, in apps/desktop/release/
 
 ## Contributing
 
-Bug reports, ideas and starter kits are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). To report a security problem, see [SECURITY.md](SECURITY.md).
+Bug reports, ideas and starter kits are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). To report a security problem, see [SECURITY.md](SECURITY.md).
+
+## Code signing policy
+
+Code signing is in preparation; releases are not signed yet. The policy covers only the Windows installer and `Loam.exe`, built from this repository. Every release is built by GitHub Actions ([release.yml](.github/workflows/release.yml)) from this public repository and approved by hand. One maintainer is author, reviewer and approver, and the maintainer's GitHub account uses multi-factor authentication. The full policy is in [docs/code-signing-policy.md](docs/code-signing-policy.md).
 
 ## License
 
