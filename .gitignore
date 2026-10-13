@@ -1,0 +1,11 @@
+node_modules/
+dist/
+release/
+out/
+coverage/
+test-results/
+test-results-archive/
+playwright-report/
+*.log
+*.tsbuildinfo
+.omc/

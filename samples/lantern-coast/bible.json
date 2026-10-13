@@ -1,0 +1,87 @@
+{
+  "format": 1,
+  "title": "The Lantern Coast",
+  "kit": "atmospheric-horror",
+  "sections": [
+    {
+      "id": "pillars",
+      "name": "Pillars"
+    },
+    {
+      "id": "atmosphere",
+      "name": "Atmosphere",
+      "fields": [
+        {
+          "key": "mood",
+          "label": "Mood",
+          "type": "multi-select",
+          "options": [
+            "wondrous",
+            "lonely",
+            "eerie",
+            "oppressive",
+            "hostile"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "world",
+      "name": "World",
+      "fields": [
+        {
+          "key": "depth",
+          "label": "Depth",
+          "type": "number"
+        },
+        {
+          "key": "mood",
+          "label": "Mood",
+          "type": "multi-select",
+          "options": [
+            "wondrous",
+            "lonely",
+            "eerie",
+            "oppressive",
+            "hostile"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "creatures",
+      "name": "Creatures",
+      "fields": [
+        {
+          "key": "threat",
+          "label": "Threat",
+          "type": "select",
+          "options": [
+            "harmless",
+            "unsettling",
+            "dangerous",
+            "deadly"
+          ]
+        },
+        {
+          "key": "habitat",
+          "label": "Habitat",
+          "type": "entry",
+          "section": "world"
+        }
+      ]
+    },
+    {
+      "id": "story",
+      "name": "Story"
+    },
+    {
+      "id": "decisions",
+      "name": "Decisions"
+    },
+    {
+      "id": "ideas",
+      "name": "Ideas"
+    }
+  ]
+}

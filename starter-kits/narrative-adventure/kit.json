@@ -1,0 +1,70 @@
+{
+  "id": "narrative-adventure",
+  "name": "Narrative adventure",
+  "description": "Story-driven games: characters, world and places to explore.",
+  "order": 2,
+  "sections": [
+    {
+      "id": "pillars",
+      "name": "Pillars",
+      "template": "templates/pillars.md"
+    },
+    {
+      "id": "story",
+      "name": "Story",
+      "template": "templates/story.md"
+    },
+    {
+      "id": "characters",
+      "name": "Characters",
+      "template": "templates/characters.md",
+      "fields": [
+        {
+          "key": "role",
+          "label": "Role",
+          "type": "select",
+          "options": ["protagonist", "ally", "mentor", "rival", "antagonist", "side character"]
+        },
+        {
+          "key": "first_appears",
+          "label": "First appears",
+          "type": "entry",
+          "section": "story"
+        }
+      ]
+    },
+    {
+      "id": "world",
+      "name": "World",
+      "template": "templates/world.md"
+    },
+    {
+      "id": "locations",
+      "name": "Locations",
+      "template": "templates/locations.md",
+      "fields": [
+        {
+          "key": "depth",
+          "label": "Depth",
+          "type": "number"
+        },
+        {
+          "key": "mood",
+          "label": "Mood",
+          "type": "multi-select",
+          "options": ["calm", "wondrous", "eerie", "tense", "hostile"]
+        }
+      ]
+    },
+    {
+      "id": "decisions",
+      "name": "Decisions",
+      "template": "templates/decisions.md"
+    },
+    {
+      "id": "ideas",
+      "name": "Ideas",
+      "template": "templates/ideas.md"
+    }
+  ]
+}

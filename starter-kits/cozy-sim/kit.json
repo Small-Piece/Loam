@@ -1,0 +1,72 @@
+{
+  "id": "cozy-sim",
+  "name": "Cozy / sim",
+  "description": "Relaxed games about routines: activities, characters and the economy.",
+  "order": 4,
+  "sections": [
+    {
+      "id": "pillars",
+      "name": "Pillars",
+      "template": "templates/pillars.md"
+    },
+    {
+      "id": "world",
+      "name": "World",
+      "template": "templates/world.md"
+    },
+    {
+      "id": "characters",
+      "name": "Characters",
+      "template": "templates/characters.md",
+      "fields": [
+        {
+          "key": "role",
+          "label": "Role",
+          "type": "select",
+          "options": ["villager", "shopkeeper", "friend", "family", "rival"]
+        }
+      ]
+    },
+    {
+      "id": "activities",
+      "name": "Activities",
+      "template": "templates/activities.md",
+      "fields": [
+        {
+          "key": "seasons",
+          "label": "Seasons",
+          "type": "multi-select",
+          "options": ["spring", "summer", "autumn", "winter"]
+        }
+      ]
+    },
+    {
+      "id": "economy",
+      "name": "Economy",
+      "template": "templates/economy.md",
+      "fields": [
+        {
+          "key": "kind",
+          "label": "Kind",
+          "type": "select",
+          "options": ["source", "sink"]
+        },
+        {
+          "key": "value",
+          "label": "Value",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "id": "decisions",
+      "name": "Decisions",
+      "template": "templates/decisions.md"
+    },
+    {
+      "id": "ideas",
+      "name": "Ideas",
+      "template": "templates/ideas.md"
+    }
+  ]
+}

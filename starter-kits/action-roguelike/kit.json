@@ -1,0 +1,71 @@
+{
+  "id": "action-roguelike",
+  "name": "Action / roguelike",
+  "description": "Mechanics-first games: the core loop, enemies and run progression.",
+  "order": 3,
+  "sections": [
+    {
+      "id": "pillars",
+      "name": "Pillars",
+      "template": "templates/pillars.md"
+    },
+    {
+      "id": "core-loop",
+      "name": "Core loop",
+      "template": "templates/core-loop.md"
+    },
+    {
+      "id": "mechanics",
+      "name": "Mechanics",
+      "template": "templates/mechanics.md",
+      "fields": [
+        {
+          "key": "status",
+          "label": "Status",
+          "type": "select",
+          "options": ["idea", "prototype", "in the game", "cut"]
+        }
+      ]
+    },
+    {
+      "id": "enemies",
+      "name": "Enemies",
+      "template": "templates/enemies.md",
+      "fields": [
+        {
+          "key": "threat",
+          "label": "Threat",
+          "type": "select",
+          "options": ["fodder", "standard", "elite", "boss"]
+        },
+        {
+          "key": "biome",
+          "label": "Biome",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "id": "progression",
+      "name": "Progression",
+      "template": "templates/progression.md",
+      "fields": [
+        {
+          "key": "kept_between_runs",
+          "label": "Kept between runs",
+          "type": "checkbox"
+        }
+      ]
+    },
+    {
+      "id": "decisions",
+      "name": "Decisions",
+      "template": "templates/decisions.md"
+    },
+    {
+      "id": "ideas",
+      "name": "Ideas",
+      "template": "templates/ideas.md"
+    }
+  ]
+}

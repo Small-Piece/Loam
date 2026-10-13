@@ -1,0 +1,38 @@
+{
+  "name": "loam",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "packageManager": "pnpm@12.11.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
+    "dev": "node scripts/dev.mjs",
+    "build:app": "pnpm --filter @loam/ui build && pnpm --filter @loam/desktop build",
+    "build": "pnpm build:app && pnpm --filter @loam/desktop dist",
+    "update-app": "node scripts/update-app.mjs",
+    "test": "pnpm test:unit && pnpm build:app && pnpm test:e2e",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc -p tsconfig.json && pnpm -r typecheck",
+    "lint": "oxlint --deny-warnings",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test:e2e:packaged": "node scripts/e2e-packaged.mjs",
+    "notices": "node scripts/notices.mjs",
+    "notices:check": "node scripts/notices.mjs --check",
+    "release:assets": "node scripts/release.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@types/node": "24.19.2",
+    "oxlint": "1.87.0",
+    "prettier": "3.9.10",
+    "typescript": "7.0.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.3"
+  }
+}

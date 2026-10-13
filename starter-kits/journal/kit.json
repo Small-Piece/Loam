@@ -1,0 +1,58 @@
+{
+  "id": "journal",
+  "name": "Study journal",
+  "description": "Study sessions, the topics they serve and the resources to learn from.",
+  "role": "journal",
+  "order": 100,
+  "sections": [
+    {
+      "id": "sessions",
+      "name": "Sessions",
+      "template": "templates/sessions.md",
+      "fields": [
+        { "key": "date", "label": "Date", "type": "date" },
+        { "key": "topics", "label": "Topics", "type": "entries", "section": "topics" },
+        { "key": "minutes", "label": "Minutes", "type": "number" },
+        {
+          "key": "kind",
+          "label": "Kind",
+          "type": "select",
+          "options": ["practice", "tutorial", "reading", "play research", "other"]
+        }
+      ]
+    },
+    {
+      "id": "topics",
+      "name": "Topics",
+      "fields": [
+        {
+          "key": "status",
+          "label": "Status",
+          "type": "select",
+          "options": ["active", "paused", "done"]
+        },
+        { "key": "started", "label": "Started", "type": "date" }
+      ]
+    },
+    {
+      "id": "resources",
+      "name": "Resources",
+      "fields": [
+        { "key": "url", "label": "URL", "type": "text" },
+        { "key": "topics", "label": "Topics", "type": "entries", "section": "topics" },
+        {
+          "key": "status",
+          "label": "Status",
+          "type": "select",
+          "options": ["to watch", "in progress", "done"]
+        },
+        {
+          "key": "rating",
+          "label": "Rating",
+          "type": "select",
+          "options": ["1", "2", "3", "4", "5"]
+        }
+      ]
+    }
+  ]
+}

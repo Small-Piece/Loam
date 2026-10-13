@@ -1,0 +1,7 @@
+packages:
+  - apps/*
+  - packages/*
+# Install scripts are blocked by default. electron-winstaller builds Squirrel
+# installers, which this project does not use (NSIS only).
+allowBuilds:
+  electron-winstaller: false

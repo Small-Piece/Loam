@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <title>Loam: grow your game from intent</title>
+    <meta
+      name="description"
+      content="Loam is a free, open-source desktop app for indie developers: references, boards, a creative bible and a study journal, as files you own."
+    />
+    <style>
+      :root {
+        --bg: #181818;
+        --bg-raised: #222222;
+        --line: #333333;
+        --text: #e8e6e3;
+        --text-dim: #a8a49e;
+        --accent: #d9a35b;
+        --accent-text: #1b1307;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          17px/1.6 system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      main {
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 0 20px 64px;
+      }
+      header {
+        padding: 72px 0 40px;
+        text-align: center;
+      }
+      h1 {
+        font-size: 56px;
+        letter-spacing: -0.02em;
+        margin: 0;
+      }
+      .tagline {
+        font-size: 24px;
+        margin: 8px 0 16px;
+      }
+      .lead {
+        max-width: 640px;
+        margin: 0 auto 28px;
+        color: var(--text-dim);
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: center;
+      }
+      .button {
+        display: inline-block;
+        padding: 12px 22px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        color: var(--text);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--accent-text);
+      }
+      .note {
+        margin-top: 14px;
+        font-size: 14px;
+        color: var(--text-dim);
+      }
+      figure {
+        margin: 40px 0;
+      }
+      img {
+        width: 100%;
+        height: auto;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        display: block;
+      }
+      figcaption {
+        margin-top: 10px;
+        color: var(--text-dim);
+        font-size: 15px;
+        text-align: center;
+      }
+      h2 {
+        font-size: 28px;
+        margin: 56px 0 16px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+      }
+      .card {
+        background: var(--bg-raised);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 18px 20px;
+      }
+      .card h3 {
+        margin: 0 0 6px;
+        font-size: 18px;
+      }
+      .card p {
+        margin: 0;
+        color: var(--text-dim);
+      }
+      ol.principles {
+        padding-left: 22px;
+      }
+      ol.principles li {
+        margin-bottom: 10px;
+      }
+      footer {
+        border-top: 1px solid var(--line);
+        margin-top: 64px;
+        padding-top: 24px;
+        color: var(--text-dim);
+        font-size: 14px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        justify-content: space-between;
+      }
+      a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Loam</h1>
+        <p class="tagline">Grow your game from intent.</p>
+        <p class="lead">
+          A free, open-source desktop app for indie developers who make games creatively and
+          artistically. Your references, your game's intent and your learning in one place, as files
+          you own.
+        </p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/Small-Piece/loam/releases/latest"
+            >Download for Windows</a
+          >
+          <a class="button" href="https://github.com/Small-Piece/loam">Source on GitHub</a>
+        </div>
+        <p class="note">
+          Windows 10 and 11, 64-bit. The installer is not code-signed yet: if SmartScreen warns you,
+          choose More info, then Run anyway.
+        </p>
+      </header>
+
+      <figure>
+        <img
+          src="images/board.png"
+          width="2156"
+          height="1780"
+          alt="A canvas board with two groups of reference images and two notes"
+        />
+        <figcaption>Arrange references on a canvas, group them and add notes.</figcaption>
+      </figure>
+
+      <h2>What it helps with</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Collect references</h3>
+          <p>A library with tags and search, and canvas boards with groups and notes.</p>
+        </div>
+        <div class="card">
+          <h3>Write down your game's intent</h3>
+          <p>
+            A creative bible: design pillars, world rules, places, creatures, characters, a decision
+            log and an idea parking lot, all checked against your pillars.
+          </p>
+        </div>
+        <div class="card">
+          <h3>See yourself learn</h3>
+          <p>
+            A study journal with sessions, topics and side-by-side comparison of your practice work
+            over time.
+          </p>
+        </div>
+      </div>
+
+      <figure>
+        <img
+          src="images/bible-pillars.png"
+          width="2156"
+          height="1780"
+          alt="The pillars page of the sample bible, The Lantern Coast"
+        />
+        <figcaption>
+          The pillars of "The Lantern Coast", the original sample bible that ships with Loam.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <img
+          src="images/library.png"
+          width="2522"
+          height="1570"
+          alt="The library with tagged reference images"
+        />
+        <figcaption>The library, with tags as filters.</figcaption>
+      </figure>
+
+      <h2>Principles</h2>
+      <ol class="principles">
+        <li>
+          <strong>Your vision decides.</strong> Loam keeps track of what you want the game to be. It
+          never decides for you.
+        </li>
+        <li>
+          <strong>Your files, your machine.</strong> Bibles and journals are plain Markdown folders
+          you can open in any editor, put in git and share with a teammate. Nothing leaves your
+          computer unless you explicitly ask.
+        </li>
+        <li>
+          <strong>Start small, grow with the game.</strong> No 40-page design document up front. One
+          question to start: <em>What should players feel?</em>
+        </li>
+        <li>
+          <strong>Never punish.</strong> No streaks, no guilt. Learning and making games is hard
+          enough.
+        </li>
+        <li>
+          <strong>Indie first.</strong> Built for solo developers and small teams, not studio
+          pipelines.
+        </li>
+      </ol>
+
+      <h2>Private by design</h2>
+      <p>
+        No accounts, no analytics, no telemetry. Your library stays on your computer. Optional
+        helpers (tag suggestions and study recaps from a small model that runs on your computer) are
+        off by default, and nothing is applied without your click.
+      </p>
+
+      <footer>
+        <span>Loam is free software under the MIT License.</span>
+        <span>
+          <a href="https://github.com/Small-Piece/loam">GitHub</a> ·
+          <a href="https://github.com/Small-Piece/loam/releases">Releases</a> ·
+          <a href="https://github.com/Small-Piece/loam/blob/main/docs/why.md">Why Loam</a>
+        </span>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,40 @@
+name: Bug report
+description: Something in Loam does not work as it should.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Loam version
+      description: Shown in About (the (i) button in the left rail).
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+      placeholder: |
+        1. Open a board
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log excerpt
+      description: >-
+        The lines around the problem from %LOCALAPPDATA%\Loam\logs\main.log. Loam hides paths
+        outside its own folders, but please remove your user name from any paths that remain.
+      render: text
+  - type: markdown
+    attributes:
+      value: Please do not attach your library, bible or journal files unless they are needed and contain nothing private.

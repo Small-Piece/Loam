@@ -1,0 +1,35 @@
+appId: app.loam.desktop
+productName: Loam
+copyright: Copyright (c) 2026 The Loam contributors
+directories:
+  output: release
+files:
+  - dist/**/*
+  - '!dist/**/*.map'
+  - package.json
+extraResources:
+  - from: ../../migrations
+    to: migrations
+    filter:
+      - '*.sql'
+  - from: ../../starter-kits
+    to: starter-kits
+    filter:
+      - '**/*.json'
+      - '**/*.md'
+  - from: ../../samples
+    to: samples
+  - from: ../../THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+  - from: ../../LICENSE
+    to: LICENSE.txt
+asarUnpack:
+  - '**/node_modules/better-sqlite3/**'
+# better-sqlite3 ships N-API prebuilds that load under Electron unchanged.
+npmRebuild: false
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true

@@ -1,0 +1,78 @@
+{
+  "id": "atmospheric-horror",
+  "name": "Atmospheric / horror",
+  "description": "Mood-first games: atmosphere, creatures and the dread in between.",
+  "order": 5,
+  "sections": [
+    {
+      "id": "pillars",
+      "name": "Pillars",
+      "template": "templates/pillars.md"
+    },
+    {
+      "id": "atmosphere",
+      "name": "Atmosphere",
+      "template": "templates/atmosphere.md",
+      "fields": [
+        {
+          "key": "mood",
+          "label": "Mood",
+          "type": "multi-select",
+          "options": ["wondrous", "lonely", "eerie", "oppressive", "hostile"]
+        }
+      ]
+    },
+    {
+      "id": "world",
+      "name": "World",
+      "template": "templates/world.md",
+      "fields": [
+        {
+          "key": "depth",
+          "label": "Depth",
+          "type": "number"
+        },
+        {
+          "key": "mood",
+          "label": "Mood",
+          "type": "multi-select",
+          "options": ["wondrous", "lonely", "eerie", "oppressive", "hostile"]
+        }
+      ]
+    },
+    {
+      "id": "creatures",
+      "name": "Creatures",
+      "template": "templates/creatures.md",
+      "fields": [
+        {
+          "key": "threat",
+          "label": "Threat",
+          "type": "select",
+          "options": ["harmless", "unsettling", "dangerous", "deadly"]
+        },
+        {
+          "key": "habitat",
+          "label": "Habitat",
+          "type": "entry",
+          "section": "world"
+        }
+      ]
+    },
+    {
+      "id": "story",
+      "name": "Story",
+      "template": "templates/story.md"
+    },
+    {
+      "id": "decisions",
+      "name": "Decisions",
+      "template": "templates/decisions.md"
+    },
+    {
+      "id": "ideas",
+      "name": "Ideas",
+      "template": "templates/ideas.md"
+    }
+  ]
+}

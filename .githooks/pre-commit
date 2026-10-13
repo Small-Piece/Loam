@@ -1,0 +1,7 @@
+#!/bin/sh
+# Blocks commits that contain secrets. Fails closed when gitleaks is missing.
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks not found on PATH. Install it (winget install Gitleaks.Gitleaks) and retry." >&2
+  exit 1
+fi
+exec gitleaks git --pre-commit --staged --redact --no-banner --verbose

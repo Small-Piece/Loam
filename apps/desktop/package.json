@@ -1,0 +1,27 @@
+{
+  "name": "@loam/desktop",
+  "productName": "Loam",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Loam desktop shell",
+  "author": "The Loam contributors",
+  "license": "MIT",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dist": "electron-builder --win nsis --publish never",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.3"
+  },
+  "devDependencies": {
+    "@loam/agent": "workspace:*",
+    "@loam/core": "workspace:*",
+    "@loam/protocol": "workspace:*",
+    "@loam/storage": "workspace:*",
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3"
+  }
+}

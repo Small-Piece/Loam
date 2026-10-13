@@ -1,0 +1,42 @@
+name: Release
+
+# Pushing a tag v<version> builds the installer and attaches it, with its SHA-256 file,
+# to a DRAFT release. The maintainer reviews the draft and publishes it by hand.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  draft:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The release fails on any shipped dependency without a permissive license.
+      - run: pnpm notices:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test:unit
+      - run: pnpm build
+      # Checks that the tag is v<version>, writes the .sha256 file and the release notes.
+      - run: pnpm release:assets
+      - name: Create the draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $version = $env:TAG.Substring(1)
+          $installer = "apps/desktop/release/Loam Setup $version.exe"
+          gh release create $env:TAG --draft --verify-tag --title "Loam $version" `
+            --notes-file apps/desktop/release/release-notes.md `
+            "$installer" "$installer.sha256"

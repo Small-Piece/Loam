@@ -1,0 +1,23 @@
+{
+  "id": "blank",
+  "name": "Blank",
+  "description": "Only the essentials: pillars, decisions and ideas. Add sections as the game needs them.",
+  "order": 1,
+  "sections": [
+    {
+      "id": "pillars",
+      "name": "Pillars",
+      "template": "templates/pillars.md"
+    },
+    {
+      "id": "decisions",
+      "name": "Decisions",
+      "template": "templates/decisions.md"
+    },
+    {
+      "id": "ideas",
+      "name": "Ideas",
+      "template": "templates/ideas.md"
+    }
+  ]
+}
