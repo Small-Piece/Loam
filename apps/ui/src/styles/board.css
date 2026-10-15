@@ -1,5 +1,5 @@
-/* Reference Board layout. Card, tag, detail and field styles are adapted from
-   v1 (ProjectDoc ui/src/styles/references.css); the grid is now a masonry. */
+/* Reference Board layout. Cards, tags, the detail panel and fields;
+   the grid is a masonry. */
 
 .board-app {
   height: 100%;
@@ -46,6 +46,23 @@
 .board-item:hover {
   background: var(--bg-hover);
   color: var(--text);
+}
+/* Boards in the sidebar can be dragged into a new order: a line shows where one lands. */
+.board-row {
+  position: relative;
+}
+.board-row.dragging {
+  opacity: 0.4;
+}
+.board-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.board-list.drop-end {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.board-menu {
+  top: 30px;
+  right: 4px;
 }
 .board-item.active {
   background: var(--accent-soft);
@@ -882,6 +899,10 @@ kbd {
   padding: 10px 14px 24px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Rows take their tile's full height. Implicit auto rows would only share the panel's
+     free height (the tiles' overflow: hidden makes their minimum 0), so with many
+     references every row collapsed to a line. */
+  grid-auto-rows: max-content;
   gap: 8px;
   align-content: start;
 }

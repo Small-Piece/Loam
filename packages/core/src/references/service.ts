@@ -347,4 +347,14 @@ export class ReferenceService {
       repository.findBoardByName(clean) ?? repository.createBoard(clean, clock.now().toISOString())
     )
   }
+
+  /** Puts the boards in the sidebar in this order; `ids` must list every board exactly once. */
+  reorderBoards(ids: readonly number[]): BoardSummary[] {
+    if (new Set(ids).size !== ids.length) throw new DomainError('A board is listed twice')
+    try {
+      return this.deps.repository.reorderBoards(ids)
+    } catch (error) {
+      throw new DomainError(error instanceof Error ? error.message : String(error))
+    }
+  }
 }

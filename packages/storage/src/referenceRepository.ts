@@ -614,10 +614,31 @@ export class SqliteReferenceRepository implements ReferenceRepository {
     }
   }
 
-  private listBoards(): BoardSummary[] {
-    return this.db
-      .prepare(`${BOARD_SUMMARY} ORDER BY b.name COLLATE NOCASE`)
-      .all() as BoardSummary[]
+  /** Boards in the order the user gave them (migration 0011_board_order). */
+  listBoards(): BoardSummary[] {
+    return this.db.prepare(`${BOARD_SUMMARY} ORDER BY b.position, b.id`).all() as BoardSummary[]
+  }
+
+  /**
+   * Puts the boards in this order, in one transaction. `ids` must name every board
+   * exactly once; anything else is refused and nothing changes.
+   */
+  reorderBoards(ids: readonly number[]): BoardSummary[] {
+    const apply = this.db.transaction(() => {
+      const existing = this.db.prepare('SELECT id FROM boards').pluck().all() as number[]
+      const wanted = new Set(ids)
+      const complete =
+        wanted.size === ids.length &&
+        ids.length === existing.length &&
+        existing.every((id) => wanted.has(id))
+      if (!complete) {
+        throw new Error('The new board order must list every board exactly once')
+      }
+      const setPosition = this.db.prepare('UPDATE boards SET position = ? WHERE id = ?')
+      ids.forEach((id, position) => setPosition.run(position, id))
+    })
+    apply()
+    return this.listBoards()
   }
 
   assetInfo(ids: readonly number[]): Array<{
@@ -656,8 +677,12 @@ export class SqliteReferenceRepository implements ReferenceRepository {
   }
 
   createBoard(name: string, createdAt: string): BoardSummary {
+    // A new board goes to the end of the list.
     const result = this.db
-      .prepare('INSERT INTO boards (name, created_at) VALUES (?, ?)')
+      .prepare(
+        `INSERT INTO boards (name, created_at, position)
+         VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM boards))`,
+      )
       .run(name, createdAt)
     return { id: Number(result.lastInsertRowid), name, count: 0, viewMode: 'canvas' }
   }

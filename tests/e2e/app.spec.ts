@@ -6,7 +6,7 @@ import { expect, test } from '@playwright/test'
 import { assertBuilt, launchApp, packagedExecutable } from './launch.ts'
 
 // 0001_init through 0005_groups_notes.
-const LATEST_SCHEMA_VERSION = '10'
+const LATEST_SCHEMA_VERSION = '11'
 
 let localAppData: string
 

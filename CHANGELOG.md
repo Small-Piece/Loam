@@ -2,6 +2,16 @@
 
 All notable changes to Loam are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 0.1.2
+
+### Fixed
+
+- Fixed Library panel thumbnails with many references: beside a canvas and in the Bible, every reference now shows as a full thumbnail instead of a thin line.
+
+### Added
+
+- Boards can be reordered: drag a board in the sidebar, or right-click it and choose Move up or Move down. New boards go to the end of the list.
+
 ## 0.1.1
 
 ### Fixed

@@ -290,6 +290,16 @@ export function ReferenceBoard() {
     }
   }
 
+  /** Puts the boards in this order (the full list of board ids). */
+  async function reorderBoards(ids: number[]) {
+    try {
+      const { boards: ordered } = await call('boards:reorder', { ids })
+      setView((current) => (current ? { ...current, boards: ordered } : current))
+    } catch (error) {
+      showError(messageOf(error))
+    }
+  }
+
   function openViewer(id: number | null, openedAt = performance.now()) {
     const index = id === null ? -1 : order.indexOf(id)
     if (index >= 0) setViewer({ cards: items, index, openedAt, fromCanvas: false })
@@ -387,6 +397,7 @@ export function ReferenceBoard() {
         place={place}
         onSelect={goTo}
         onCreate={createBoard}
+        onReorder={(ids) => void reorderBoards(ids)}
       />
 
       <main className="board-main">

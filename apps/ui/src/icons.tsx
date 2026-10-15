@@ -1,4 +1,4 @@
-// Thin-stroke line icons (1.6px), ported from v1 (ProjectDoc ui/src/icons/Icons.tsx).
+// Thin-stroke line icons (1.6px stroke).
 // Only the icons the Reference Board uses are kept.
 import type { ReactNode } from 'react'
 

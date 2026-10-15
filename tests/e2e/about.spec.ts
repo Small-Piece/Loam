@@ -31,7 +31,7 @@ test('About shows the version, the MIT license, the links and the third-party no
 
   await page.getByRole('button', { name: 'About Loam' }).click()
   const about = page.getByRole('dialog', { name: 'About Loam' })
-  await expect(about.getByRole('heading', { name: 'Loam 0.1.1' })).toBeVisible()
+  await expect(about.getByRole('heading', { name: 'Loam 0.1.2' })).toBeVisible()
   // The public repository is "Loam" with a capital L; GitHub Pages paths are case-sensitive.
   const reply = (await page.evaluate(() => window.loam.invoke('app:about', {}))) as {
     data: { websiteUrl: string; repositoryUrl: string }

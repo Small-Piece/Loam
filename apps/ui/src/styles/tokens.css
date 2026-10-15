@@ -1,4 +1,4 @@
-/* Design tokens and base styles, ported from v1 (ProjectDoc ui/src/index.css).
+/* Design tokens and base styles.
    Only what the Reference Board uses is kept. */
 :root {
   /* Dark app: native widgets (scrollbars, inputs, checkboxes) render dark too. */

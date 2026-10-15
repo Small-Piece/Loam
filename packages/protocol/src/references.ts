@@ -252,6 +252,17 @@ export const referenceMessages = {
     request: z.strictObject({ name: z.string().min(1).max(80) }),
     response: z.strictObject({ board: boardSummarySchema }),
   },
+  /** Puts the boards in the sidebar in this order: every board id, each once. */
+  'boards:reorder': {
+    request: z.strictObject({
+      ids: z
+        .array(id)
+        .min(1)
+        .max(10_000)
+        .refine((ids) => new Set(ids).size === ids.length, 'Each board may appear only once'),
+    }),
+    response: z.strictObject({ boards: z.array(boardSummarySchema) }),
+  },
   /** Moves a selection to the Trash; returns the ids that moved. */
   'refs:delete': {
     request: z.strictObject({ ids: idList }),

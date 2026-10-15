@@ -117,6 +117,7 @@ ${source.text}`,
       return { detail: references.update(id, patch) }
     },
     'boards:create': (request) => ({ board: references.createBoard(request.name) }),
+    'boards:reorder': (request) => ({ boards: references.reorderBoards(request.ids) }),
     'refs:delete': (request) => ({ ids: references.moveToTrash(request.ids) }),
     'refs:restore': (request) => ({ ids: references.restoreFromTrash(request.ids) }),
     'trash:empty': () => references.emptyTrash(),

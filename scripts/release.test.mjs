@@ -30,9 +30,10 @@ describe('release files', () => {
     expect(changelogEntry(changelog, '9.9.9')).toBeNull()
   })
 
-  it('has entries for 0.1.0 and 0.1.1 in the real CHANGELOG.md', () => {
+  it('has entries for 0.1.0, 0.1.1 and 0.1.2 in the real CHANGELOG.md', () => {
     const real = readFileSync(fileURLToPath(new URL('../CHANGELOG.md', import.meta.url)), 'utf8')
     expect(changelogEntry(real, '0.1.0')).toContain('### Privacy')
+    expect(changelogEntry(real, '0.1.2')).toContain('Boards can be reordered')
     expect(changelogEntry(real, '0.1.1')).toBe(
       '### Fixed\n\n- The Website button in About now opens the right page.',
     )

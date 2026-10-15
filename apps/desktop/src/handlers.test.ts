@@ -35,7 +35,7 @@ describe('desktop handlers', () => {
     ai: unused<AiController>('ai'),
     about: () => ({
       name: 'Loam',
-      version: '0.1.1',
+      version: '0.1.2',
       license: 'MIT',
       repositoryUrl: 'https://github.com/Small-Piece/Loam',
       websiteUrl: 'https://small-piece.github.io/Loam/',

@@ -204,3 +204,21 @@ describe('protocol events', () => {
     expect(checkEvent('bible:changed', { vaultId: 0, paths: [] })).toBeNull()
   })
 })
+
+describe('boards:reorder', () => {
+  const request = messages['boards:reorder'].request
+
+  it('accepts a list of distinct board ids', () => {
+    expect(request.safeParse({ ids: [3, 1, 2] }).success).toBe(true)
+  })
+
+  it('rejects repeated, empty, non-integer or extra fields before any handler runs', async () => {
+    expect(request.safeParse({ ids: [1, 2, 2] }).success).toBe(false)
+    expect(request.safeParse({ ids: [] }).success).toBe(false)
+    expect(request.safeParse({ ids: [1.5] }).success).toBe(false)
+    expect(request.safeParse({ ids: [0] }).success).toBe(false)
+    expect(request.safeParse({ ids: [1], extra: true }).success).toBe(false)
+    const result = await dispatch(withHandlers({}), 'boards:reorder', { ids: [4, 4] })
+    expect(result.ok).toBe(false)
+  })
+})

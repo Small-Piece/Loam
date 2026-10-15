@@ -55,6 +55,8 @@ export interface ReferenceRepository {
   update(id: number, patch: ReferencePatch): boolean
   listBoard(query: BoardQuery): BoardView
   createBoard(name: string, createdAt: string): BoardSummary
+  /** Puts the boards in this order; `ids` lists every board exactly once. Returns all boards. */
+  reorderBoards(ids: readonly number[]): BoardSummary[]
   /** Names of the tags used by references in the Library (not the Trash). */
   tagNames(): string[]
   /** What copying references into a bible needs: their image and thumbnail hashes. */

@@ -163,7 +163,7 @@ test('backup: one before migrating a schema-4 database, none on the next start, 
   expect(readdirSync(backups)).toContain('readme.txt')
   const log = readFileSync(join(dataDir, 'logs', 'main.log'), 'utf8')
   expect(log).toContain(`backed up the database to ${join(backups, fresh[0]!)} before migrating`)
-  expect(log).toMatch(/schema version 4 before, 10 after migrating/)
+  expect(log).toMatch(/schema version 4 before, 11 after migrating/)
   const copy = new DatabaseSync(join(backups, fresh[0]!), { readOnly: true })
   expect(copy.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get()).toEqual({
     value: '4',
@@ -180,7 +180,7 @@ test('backup: one before migrating a schema-4 database, none on the next start, 
   const migrated = new DatabaseSync(join(dataDir, 'loam.db'), { readOnly: true })
   // Migrated all the way to the latest schema.
   expect(migrated.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get()).toEqual({
-    value: '10',
+    value: '11',
   })
   migrated.close()
 })

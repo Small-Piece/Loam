@@ -72,7 +72,7 @@ test('a second launch exits before opening the database and brings the first win
   const launches = log.match(/\[startup\] Loam .* launching/g) ?? []
   expect(launches).toHaveLength(2)
   expect(log.match(/\[storage\] database opened/g) ?? []).toHaveLength(1)
-  expect(log).toMatch(/\[storage\] database opened in \d+ ms: schema version 0 before, 10 after/)
+  expect(log).toMatch(/\[storage\] database opened in \d+ ms: schema version 0 before, 11 after/)
   expect(log).toContain('already running; handing over to it and exiting')
   // The handing-over process is not the one that opened the database.
   const pidOf = (pattern: RegExp) =>
@@ -95,8 +95,8 @@ test('main.log records startup timing and the schema before and after opening', 
   app = await launchApp(localAppData)
   await (await app.firstWindow()).getByRole('heading', { name: 'All references' }).waitFor()
   const log = mainLog()
-  expect(log).toMatch(/schema version 0 before, 10 after migrating/)
-  expect(log).toMatch(/schema version 10 before, 10 after migrating/)
+  expect(log).toMatch(/schema version 0 before, 11 after migrating/)
+  expect(log).toMatch(/schema version 11 before, 11 after migrating/)
   expect(log).not.toContain('backed up the database')
   await expect.poll(mainLog).toMatch(/\[startup\] window shown \d+ ms after launch/)
 })
