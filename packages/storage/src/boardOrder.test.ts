@@ -86,7 +86,13 @@ describe('migration 0011_board_order', () => {
     ).run()
     const before = boardTables(db)
 
-    expect(runMigrations(db, loadMigrations(migrationsDir))).toBe(11)
+    // Apply 0011 and only up to it: later migrations have their own tests.
+    const upTo11 = join(dir, 'upTo11')
+    mkdirSync(upTo11)
+    for (const name of readdirSync(migrationsDir).filter((file) => file < '0012')) {
+      copyFileSync(join(migrationsDir, name), join(upTo11, name))
+    }
+    expect(runMigrations(db, loadMigrations(upTo11))).toBe(11)
 
     const repository = new SqliteReferenceRepository(db)
     expect(repository.listBoards().map((board) => board.name)).toEqual([

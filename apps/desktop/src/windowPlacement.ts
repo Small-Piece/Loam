@@ -33,18 +33,37 @@ export function chooseDisplay(
   return displays[Number(wanted)] ?? null
 }
 
-/** Centers a window of the preferred size in the display's work area, shrinking it to fit. */
+/** Where a placed window sits in the display's work area. */
+export type WindowAnchor = 'center' | 'bottom'
+
+/**
+ * Reads LOAM_WINDOW_ANCHOR: "bottom" puts the window at the bottom of the work
+ * area; unset or anything else keeps it centered.
+ */
+export function chooseAnchor(setting: string | undefined): WindowAnchor {
+  return setting?.trim() === 'bottom' ? 'bottom' : 'center'
+}
+
+/**
+ * Places a window of the preferred size in the display's work area, shrinking
+ * it to fit. It is centered horizontally; vertically it is centered, or with
+ * the "bottom" anchor its bottom edge sits on the work area's bottom (above
+ * the taskbar).
+ */
 export function placeOn(
   display: DisplayInfo,
   preferred: { width: number; height: number },
+  anchor: WindowAnchor = 'center',
 ): Placement {
   const area = display.workArea
   const width = Math.min(preferred.width, area.width)
   const height = Math.min(preferred.height, area.height)
+  const y =
+    anchor === 'bottom' ? area.y + area.height - height : area.y + (area.height - height) / 2
   return {
     bounds: {
       x: Math.round(area.x + (area.width - width) / 2),
-      y: Math.round(area.y + (area.height - height) / 2),
+      y: Math.round(y),
       width,
       height,
     },

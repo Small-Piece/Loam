@@ -9,10 +9,12 @@ import type {
   ImageHashMatch,
   ImageSize,
   ItemState,
+  NewItem,
   NewReference,
   PurgeResult,
   ReferenceDetail,
   ReferencePatch,
+  TagCount,
 } from './types.ts'
 
 /** Persistence for references, tags and boards (SQLite in the desktop app). */
@@ -24,12 +26,20 @@ export interface ReferenceRepository {
   /** Runs work atomically: everything it writes is saved, or nothing is. */
   inTransaction<T>(work: () => T): T
   /**
-   * Takes references off one board only (their notes attached on that board
-   * go too); returns the item states that were removed.
+   * Takes references off one board only: every placement of them there (and
+   * the notes attached to those placements). Returns the removed item states.
    */
   removeFromBoard(boardId: number, refIds: readonly number[]): ItemState[]
-  /** Inserts items, or moves, rescales and regroups the ones already on the board. */
-  upsertItems(boardId: number, items: readonly ItemState[]): void
+  /** Removes these placements from the board (their attached notes go too); returns them. */
+  removeItems(boardId: number, itemIds: readonly number[]): ItemState[]
+  /**
+   * Saves items: one without an id is a new placement; one with an id moves,
+   * rescales and regroups that placement, or puts it back under that id (undo of a
+   * removal). Returns the item ids, in order.
+   */
+  putItems(boardId: number, items: ReadonlyArray<NewItem | ItemState>): number[]
+  /** Board and reference of a placement, or null when it does not exist. */
+  itemOwner(itemId: number): { boardId: number; referenceId: number } | null
   listGroups(boardId: number): BoardGroup[]
   /** Notes on a board. includeTrashed also returns notes attached to images in the Trash. */
   listNotes(boardId: number, includeTrashed: boolean): BoardNote[]
@@ -59,6 +69,8 @@ export interface ReferenceRepository {
   reorderBoards(ids: readonly number[]): BoardSummary[]
   /** Names of the tags used by references in the Library (not the Trash). */
   tagNames(): string[]
+  /** Every tag used in the Library (not the Trash), whatever board, with its use count. */
+  libraryTags(): TagCount[]
   /** What copying references into a bible needs: their image and thumbnail hashes. */
   assetInfo(ids: readonly number[]): Array<{
     id: number

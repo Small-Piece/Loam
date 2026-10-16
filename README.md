@@ -68,6 +68,13 @@ pnpm build          # the Windows installer, in apps/desktop/release/
 
 `pnpm lint`, `pnpm typecheck` and `pnpm format:check` run the same checks as CI.
 
+Two settings keep the windows of test runs out of your way:
+
+- `LOAM_WINDOW_DISPLAY` puts the window on another monitor and shows it without taking the keyboard focus: `secondary` (the first monitor that is not the main one) or a monitor number counted from 0. When it is unset, or names a monitor that does not exist, the window opens where it normally would.
+- `LOAM_WINDOW_ANCHOR` says where on that monitor: `center`, or `bottom` (centered horizontally, bottom edge just above the taskbar). It only applies together with `LOAM_WINDOW_DISPLAY`.
+
+The end-to-end tests use `secondary` and `bottom` unless you set either one yourself.
+
 ## Contributing
 
 Bug reports, ideas and starter kits are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). To report a security problem, see [SECURITY.md](SECURITY.md).

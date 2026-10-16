@@ -170,7 +170,7 @@ describe('reference messages', () => {
   })
 
   it('rejects an update with a negative or fractional id', async () => {
-    const updater = withHandlers({ 'refs:update': () => ({ detail: null }) })
+    const updater = withHandlers({ 'refs:update': () => ({ detail: null, allTags: [] }) })
     for (const id of [-1, 1.5, 0]) {
       expect(await dispatch(updater, 'refs:update', { id, note: 'x' })).toMatchObject({
         ok: false,

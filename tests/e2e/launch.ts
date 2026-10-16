@@ -49,10 +49,12 @@ export function appCommand(
   extraEnv: Record<string, string> = {},
 ): AppCommand {
   const env: Record<string, string> = {
-    // Keep test windows off the primary monitor and out of the keyboard focus;
-    // set LOAM_WINDOW_DISPLAY (or the old UM_WINDOW_DISPLAY) in the outer environment to override.
+    // Keep test windows off the primary monitor, out of the keyboard focus and at the bottom of
+    // that monitor; set LOAM_WINDOW_DISPLAY or LOAM_WINDOW_ANCHOR (or the old UM_ names) in the
+    // outer environment to override.
     ...definedOnly(process.env),
     LOAM_WINDOW_DISPLAY: testSetting('WINDOW_DISPLAY') ?? 'secondary',
+    LOAM_WINDOW_ANCHOR: testSetting('WINDOW_ANCHOR') ?? 'bottom',
     LOCALAPPDATA: localAppData,
     LOAM_DEV_SERVER_URL: '',
     ...extraEnv,

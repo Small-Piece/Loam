@@ -8,7 +8,10 @@ import type {
 } from '@loam/protocol'
 import { boundsOf, intersects, itemBox, type Box, type Point } from './geometry.ts'
 
-/** Selection and DOM keys: i:<referenceId>, n:<noteId>, g:<groupId>. */
+/**
+ * Selection and DOM keys: i:<itemId>, n:<noteId>, g:<groupId>. An item is one placement
+ * of a reference; the same reference can be on a board several times.
+ */
 export type ObjectKey = `i:${number}` | `n:${number}` | `g:${number}`
 
 export const itemKey = (id: number): ObjectKey => `i:${id}`
@@ -16,7 +19,7 @@ export const noteKey = (id: number): ObjectKey => `n:${id}`
 export const groupKey = (id: number): ObjectKey => `g:${id}`
 
 export function parseKey(key: string): { kind: 'i' | 'n' | 'g'; id: number } | null {
-  const match = /^([ing]):(\d+)$/.exec(key)
+  const match = /^([ing]):(-?\d+)$/.exec(key)
   if (!match) return null
   return { kind: match[1] as 'i' | 'n' | 'g', id: Number(match[2]) }
 }
@@ -68,20 +71,20 @@ export function estimateNoteSize(note: BoardNote): { width: number; height: numb
 /** Where a note is on the canvas. An attached note sits at its offset from its image, scaled with it. */
 export function notePosition(
   note: BoardNote,
-  itemsById: ReadonlyMap<number, CanvasItem>,
+  items: ReadonlyMap<number, CanvasItem>,
 ): Point | null {
-  if (note.attachedReferenceId === null) return { x: note.x, y: note.y }
-  const image = itemsById.get(note.attachedReferenceId)
+  if (note.attachedItemId === null) return { x: note.x, y: note.y }
+  const image = items.get(note.attachedItemId)
   if (!image) return null
   return { x: image.x + note.x * image.scale, y: image.y + note.y * image.scale }
 }
 
 export function noteBox(
   note: BoardNote,
-  itemsById: ReadonlyMap<number, CanvasItem>,
+  items: ReadonlyMap<number, CanvasItem>,
   sizes: NoteSizes,
 ): Box | null {
-  const at = notePosition(note, itemsById)
+  const at = notePosition(note, items)
   if (!at) return null
   const size = sizes.get(note.id) ?? estimateNoteSize(note)
   return { x: at.x, y: at.y, width: note.width ?? size.width, height: size.height }
@@ -96,8 +99,9 @@ export function byId<T extends { id: number }>(list: readonly T[]): Map<number, 
   return new Map(list.map((entry) => [entry.id, entry]))
 }
 
-export function itemsByRef(items: readonly CanvasItem[]): Map<number, CanvasItem> {
-  return new Map(items.map((item) => [item.referenceId, item]))
+/** Items by their own (placement) id. */
+export function itemsById(items: readonly CanvasItem[]): Map<number, CanvasItem> {
+  return new Map(items.map((item) => [item.id, item]))
 }
 
 /**
@@ -106,16 +110,16 @@ export function itemsByRef(items: readonly CanvasItem[]): Map<number, CanvasItem
  * is visible.
  */
 export function groupBounds(groupId: number, state: CanvasState, sizes: NoteSizes): Box | null {
-  const refs = itemsByRef(state.items)
+  const items = itemsById(state.items)
   const childItems = state.items.filter((item) => item.groupId === groupId)
-  const childRefs = new Set(childItems.map((item) => item.referenceId))
+  const childIds = new Set(childItems.map((item) => item.id))
   const boxes: Box[] = childItems.map(itemBox)
   for (const note of state.notes) {
     const belongs =
       note.groupId === groupId ||
-      (note.attachedReferenceId !== null && childRefs.has(note.attachedReferenceId))
+      (note.attachedItemId !== null && childIds.has(note.attachedItemId))
     if (!belongs) continue
-    const box = noteBox(note, refs, sizes)
+    const box = noteBox(note, items, sizes)
     if (box) boxes.push(box)
   }
   const inner = boundsOf(boxes)
@@ -134,11 +138,11 @@ export function objectBox(key: ObjectKey, state: CanvasState, sizes: NoteSizes):
   if (!parsed) return null
   if (parsed.kind === 'g') return groupBounds(parsed.id, state, sizes)
   if (parsed.kind === 'i') {
-    const item = state.items.find((entry) => entry.referenceId === parsed.id)
+    const item = state.items.find((entry) => entry.id === parsed.id)
     return item ? itemBox(item) : null
   }
   const note = state.notes.find((entry) => entry.id === parsed.id)
-  return note ? noteBox(note, itemsByRef(state.items), sizes) : null
+  return note ? noteBox(note, itemsById(state.items), sizes) : null
 }
 
 export interface DrawEntry {
@@ -159,16 +163,14 @@ export function drawOrder(state: CanvasState): ObjectKey[] {
     entries.push({ key: groupKey(group.id), order: [group.z, 0, 0, 0, group.id] })
   for (const item of state.items) {
     const group = item.groupId === null ? undefined : groups.get(item.groupId)
-    const order = group
-      ? [group.z, 1, item.z, 0, item.referenceId]
-      : [item.z, 0, 0, 1, item.referenceId]
-    itemOrder.set(item.referenceId, order)
-    entries.push({ key: itemKey(item.referenceId), order })
+    const order = group ? [group.z, 1, item.z, 0, item.id] : [item.z, 0, 0, 1, item.id]
+    itemOrder.set(item.id, order)
+    entries.push({ key: itemKey(item.id), order })
   }
   for (const note of state.notes) {
     let order: number[]
-    if (note.attachedReferenceId !== null) {
-      const base = itemOrder.get(note.attachedReferenceId)
+    if (note.attachedItemId !== null) {
+      const base = itemOrder.get(note.attachedItemId)
       if (!base) continue
       order = [...base, 1, note.z, note.id]
     } else {
@@ -191,14 +193,11 @@ export function drawOrder(state: CanvasState): ObjectKey[] {
 export function groupOf(key: ObjectKey, state: CanvasState): number | null {
   const parsed = parseKey(key)
   if (!parsed || parsed.kind === 'g') return null
-  if (parsed.kind === 'i')
-    return state.items.find((item) => item.referenceId === parsed.id)?.groupId ?? null
+  if (parsed.kind === 'i') return state.items.find((item) => item.id === parsed.id)?.groupId ?? null
   const note = state.notes.find((entry) => entry.id === parsed.id)
   if (!note) return null
-  if (note.attachedReferenceId !== null) {
-    return (
-      state.items.find((item) => item.referenceId === note.attachedReferenceId)?.groupId ?? null
-    )
+  if (note.attachedItemId !== null) {
+    return state.items.find((item) => item.id === note.attachedItemId)?.groupId ?? null
   }
   return note.groupId
 }
@@ -206,11 +205,9 @@ export function groupOf(key: ObjectKey, state: CanvasState): number | null {
 /** Images and free notes directly in a group (attached notes come with their images). */
 export function childrenOf(groupId: number, state: CanvasState): ObjectKey[] {
   return [
-    ...state.items
-      .filter((item) => item.groupId === groupId)
-      .map((item) => itemKey(item.referenceId)),
+    ...state.items.filter((item) => item.groupId === groupId).map((item) => itemKey(item.id)),
     ...state.notes
-      .filter((note) => note.groupId === groupId && note.attachedReferenceId === null)
+      .filter((note) => note.groupId === groupId && note.attachedItemId === null)
       .map((note) => noteKey(note.id)),
   ]
 }
@@ -219,9 +216,9 @@ export function childrenOf(groupId: number, state: CanvasState): ObjectKey[] {
 export function topLevel(state: CanvasState): ObjectKey[] {
   return [
     ...state.groups.map((group) => groupKey(group.id)),
-    ...state.items.filter((item) => item.groupId === null).map((item) => itemKey(item.referenceId)),
+    ...state.items.filter((item) => item.groupId === null).map((item) => itemKey(item.id)),
     ...state.notes
-      .filter((note) => note.groupId === null && note.attachedReferenceId === null)
+      .filter((note) => note.groupId === null && note.attachedItemId === null)
       .map((note) => noteKey(note.id)),
   ]
 }
@@ -230,21 +227,22 @@ function zOf(key: ObjectKey, state: CanvasState): number {
   const parsed = parseKey(key)
   if (!parsed) return 0
   if (parsed.kind === 'g') return state.groups.find((group) => group.id === parsed.id)?.z ?? 0
-  if (parsed.kind === 'i') return state.items.find((item) => item.referenceId === parsed.id)?.z ?? 0
+  if (parsed.kind === 'i') return state.items.find((item) => item.id === parsed.id)?.z ?? 0
   return state.notes.find((note) => note.id === parsed.id)?.z ?? 0
 }
 
 /** Steps that set new z values for objects (items, notes or groups). */
 export function zOps(changes: ReadonlyMap<ObjectKey, number>, state: CanvasState): CanvasOp[] {
   const items = state.items
-    .filter((item) => changes.has(itemKey(item.referenceId)))
+    .filter((item) => changes.has(itemKey(item.id)))
     .map((item) => ({
+      id: item.id,
       referenceId: item.referenceId,
       x: item.x,
       y: item.y,
       scale: item.scale,
       groupId: item.groupId,
-      z: changes.get(itemKey(item.referenceId))!,
+      z: changes.get(itemKey(item.id))!,
     }))
   const notes = state.notes
     .filter((note) => changes.has(noteKey(note.id)))
@@ -277,7 +275,7 @@ export function restackObjects(
     // Attached notes always stay right above their image.
     if (
       parsed.kind === 'n' &&
-      state.notes.find((note) => note.id === parsed.id)?.attachedReferenceId != null
+      state.notes.find((note) => note.id === parsed.id)?.attachedItemId != null
     )
       continue
     const group = parsed.kind === 'g' ? null : groupOf(key, state)
@@ -349,7 +347,7 @@ export function groupAtPoint(
 export function withoutObjects(state: CanvasState, keys: ReadonlySet<ObjectKey>): CanvasState {
   return {
     groups: state.groups,
-    items: state.items.filter((item) => !keys.has(itemKey(item.referenceId))),
+    items: state.items.filter((item) => !keys.has(itemKey(item.id))),
     notes: state.notes.filter((note) => !keys.has(noteKey(note.id))),
   }
 }
@@ -374,11 +372,11 @@ export function center(box: Box): Point {
 export function attachTarget(noteArea: Box, state: CanvasState): CanvasItem | null {
   const order = drawOrder(state)
   const point = center(noteArea)
-  const refs = itemsByRef(state.items)
+  const items = itemsById(state.items)
   for (let index = order.length - 1; index >= 0; index--) {
     const parsed = parseKey(order[index]!)
     if (parsed?.kind !== 'i') continue
-    const item = refs.get(parsed.id)
+    const item = items.get(parsed.id)
     if (item && contains(itemBox(item), point)) return item
   }
   let best: CanvasItem | null = null
@@ -396,4 +394,32 @@ export function attachTarget(noteArea: Box, state: CanvasState): CanvasItem | nu
     }
   }
   return best
+}
+
+/** Client key of the n-th copy made by one duplicate. */
+export const copyKey = (index: number): string => `copy${index}`
+
+/**
+ * New placements copying these items, moved by (dx, dy): same image, scale and
+ * group, stacked above everything else at their level (the top level, or
+ * inside their group), in their own order. Notes attached to them are not
+ * copied. Each copy carries a client key, so the new ids come back with the edit.
+ */
+export function copyItems(
+  ids: ReadonlySet<number>,
+  state: CanvasState,
+  dx: number,
+  dy: number,
+): Array<CanvasItem & { key: string }> {
+  const chosen = state.items.filter((item) => ids.has(item.id)).sort((a, b) => a.z - b.z)
+  const nextZ = new Map<number | null, number>()
+  return chosen.map((item, index) => {
+    let z = nextZ.get(item.groupId)
+    if (z === undefined) {
+      const peers = item.groupId === null ? topLevel(state) : childrenOf(item.groupId, state)
+      z = Math.max(0, ...peers.map((key) => zOf(key, state))) + 1
+    }
+    nextZ.set(item.groupId, z + 1)
+    return { ...item, x: item.x + dx, y: item.y + dy, z, key: copyKey(index) }
+  })
 }

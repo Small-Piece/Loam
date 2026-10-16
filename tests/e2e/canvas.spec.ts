@@ -343,7 +343,7 @@ test('Delete on the canvas removes from the board only; Ctrl+Z puts it back exac
   await expect(items(page)).toHaveCount(2)
 })
 
-test('Library drag places on the canvas once; paste lands mid-view', async () => {
+test('Library drag places on the canvas, again on each drop; paste lands mid-view', async () => {
   const { app, page } = await launchApp()
   await drop(page, await makeImageTransfer(page, [1]))
   await expect(page.getByTestId('ref-card')).toHaveCount(1)
@@ -358,9 +358,11 @@ test('Library drag places on the canvas once; paste lands mid-view', async () =>
       targetPosition: { x: canvasBox.width * 0.3, y: canvasBox.height * 0.4 },
     })
   await expect(items(page)).toHaveCount(1)
-  // Dragging the same reference again does not duplicate it.
+  // Dragging the same reference again places it once more (Slice 9.2), at the new drop point.
   await page.getByTestId('library-item').first().dragTo(page.getByTestId('canvas'))
-  await expect(items(page)).toHaveCount(1)
+  await expect(items(page)).toHaveCount(2)
+  const placed = await canvasItems(page, boardId)
+  expect(new Set(placed.map((item) => item.referenceId)).size).toBe(1)
 
   // Paste a screenshot: it enters the Library and lands in the middle of the view.
   await app.evaluate(async ({ clipboard, ClipboardItem, nativeImage }) => {
@@ -372,7 +374,7 @@ test('Library drag places on the canvas once; paste lands mid-view', async () =>
   })
   await page.getByTestId('canvas').click({ position: { x: 5, y: 5 } })
   await page.keyboard.press('Control+v')
-  await expect(items(page)).toHaveCount(2)
+  await expect(items(page)).toHaveCount(3)
   await expect(page.getByTestId('library-item')).toHaveCount(2)
   const pasted = (await canvasItems(page, boardId)).find((i) => i.title.startsWith('Pasted image'))
   if (!pasted) throw new Error('pasted item missing')

@@ -6,6 +6,8 @@ import { LibraryPanel } from '../canvas/LibraryPanel.tsx'
 import { ImageIcon, SearchIcon, TrashIcon } from '../icons.tsx'
 import { BoardSidebar } from './BoardSidebar.tsx'
 import { ConfirmDialog } from './ConfirmDialog.tsx'
+import { ContextMenu, copyMenuItems } from './ContextMenu.tsx'
+import { copyImages } from './copyImages.ts'
 import { DetailPanel } from './DetailPanel.tsx'
 import { prepareImages } from './images.ts'
 import { MasonryGrid } from './MasonryGrid.tsx'
@@ -83,6 +85,8 @@ export function ReferenceBoard() {
   const [confirmEmpty, setConfirmEmpty] = useState(false)
   const [canvasVersion, setCanvasVersion] = useState(0)
   const [onBoard, setOnBoard] = useState<ReadonlySet<number>>(new Set())
+  /** The right-click menu on grid cards: the references it copies, at the pointer. */
+  const [cardMenu, setCardMenu] = useState<{ ids: number[]; x: number; y: number } | null>(null)
   const latestRequest = useRef(0)
   const undoStack = useRef<UndoEntry[]>([])
   const canvasApi = useRef<CanvasApi | null>(null)
@@ -97,6 +101,18 @@ export function ReferenceBoard() {
   const refreshCanvas = useCallback(() => setCanvasVersion((version) => version + 1), [])
 
   const showError = useCallback((message: string) => setToast({ kind: 'error', text: message }), [])
+  const showNotice = useCallback((message: string) => setToast({ kind: 'info', text: message }), [])
+
+  /** Copies references to the clipboard (Ctrl+C or Copy image) and says what was copied. */
+  const copyToClipboard = useCallback(
+    (ids: readonly number[]) => {
+      if (ids.length === 0) return
+      copyImages(ids)
+        .then(showNotice)
+        .catch((error: unknown) => showError(messageOf(error)))
+    },
+    [showError, showNotice],
+  )
 
   /** Loads the board view; only the newest request may update the screen. */
   const reload = useCallback(() => {
@@ -157,7 +173,43 @@ export function ReferenceBoard() {
     [boardId, canvasMode, refreshCanvas, reload, selection, showError],
   )
 
-  const dragging = useImageIntake((files, point) => void importFiles(files, point))
+  /**
+   * Ctrl+V. When the clipboard holds Loam's own copy, its references are used: on a
+   * canvas they are placed mid-view, on a board they join it, in the Library nothing
+   * is imported. Otherwise pasted images are imported as before.
+   */
+  const pasteFiles = useCallback(
+    async (files: IncomingFile[]) => {
+      const api = canvasMode ? canvasApi.current : null
+      try {
+        const own = await call('refs:pasteCopied', { boardId, at: api ? api.viewCenter() : null })
+        if (own.ids.length > 0) {
+          const count = plural(own.ids.length, 'image')
+          showNotice(
+            canvasMode
+              ? `Placed ${count} from the clipboard`
+              : boardId !== null
+                ? `Pasted ${count} (already in the Library)`
+                : `${count} already in the Library`,
+          )
+          if (!canvasMode) selection.set(own.ids, false)
+          reload()
+          refreshCanvas()
+          return
+        }
+      } catch (error) {
+        showError(messageOf(error))
+        return
+      }
+      if (files.length > 0) await importFiles(files, null)
+    },
+    [boardId, canvasMode, importFiles, refreshCanvas, reload, selection, showError, showNotice],
+  )
+
+  const dragging = useImageIntake(
+    (files, point) => void importFiles(files, point),
+    (files) => void pasteFiles(files),
+  )
 
   function pushUndo(entry: UndoEntry) {
     undoStack.current = [...undoStack.current, entry].slice(-UNDO_LIMIT)
@@ -341,6 +393,9 @@ export function ReferenceBoard() {
     } else if (canvasMode) {
       // The canvas handles its own keys (Space pans there; it never opens the viewer).
       return
+    } else if (ctrl && event.key.toLowerCase() === 'c' && !inTrash && selection.ids.length > 0) {
+      event.preventDefault()
+      copyToClipboard(order.filter((id) => selection.has(id)))
     } else if (ctrl && event.key.toLowerCase() === 'a') {
       event.preventDefault()
       selection.selectAll()
@@ -467,6 +522,7 @@ export function ReferenceBoard() {
             onOpenViewer={(cards, index) =>
               setViewer({ cards, index, openedAt: performance.now(), fromCanvas: true })
             }
+            onCopy={copyToClipboard}
             onError={showError}
           />
         ) : (
@@ -516,6 +572,15 @@ export function ReferenceBoard() {
                 isSelected={selection.has}
                 onClickCard={selection.click}
                 onOpenCard={(id) => openViewer(id)}
+                onCardMenu={(id, x, y) => {
+                  if (inTrash) return
+                  // Right-click on a selected card copies the selection; on another, just it.
+                  const ids = selection.has(id)
+                    ? order.filter((entry) => selection.has(entry))
+                    : [id]
+                  if (!selection.has(id)) selection.set([id], false)
+                  setCardMenu({ ids, x, y })
+                }}
               />
             </section>
           </>
@@ -524,7 +589,12 @@ export function ReferenceBoard() {
 
       {/* The right column is always there, so selecting never reflows the grid under the pointer. */}
       {canvasMode ? (
-        <LibraryPanel version={canvasVersion} onBoard={onBoard} onError={showError} />
+        <LibraryPanel
+          version={canvasVersion}
+          onBoard={onBoard}
+          onError={showError}
+          onNotice={showNotice}
+        />
       ) : detailId !== null ? (
         <DetailPanel
           key={detailId}
@@ -532,6 +602,7 @@ export function ReferenceBoard() {
           boards={boards}
           onClose={selection.clear}
           onSaved={reload}
+          onCopy={() => copyToClipboard([detailId])}
           onError={showError}
         />
       ) : (
@@ -566,7 +637,18 @@ export function ReferenceBoard() {
           index={viewer.index}
           openedAt={viewer.openedAt}
           onIndexChange={(index) => setViewer({ ...viewer, index, openedAt: performance.now() })}
+          onCopy={(card) => copyToClipboard([card.id])}
           onClose={closeViewer}
+        />
+      )}
+
+      {cardMenu && (
+        <ContextMenu
+          x={cardMenu.x}
+          y={cardMenu.y}
+          label="Reference actions"
+          items={copyMenuItems(cardMenu.ids.length, () => copyToClipboard(cardMenu.ids))}
+          onClose={() => setCardMenu(null)}
         />
       )}
 

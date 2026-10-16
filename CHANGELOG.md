@@ -11,6 +11,10 @@ All notable changes to Loam are listed here. Versions follow [Semantic Versionin
 ### Added
 
 - Boards can be reordered: drag a board in the sidebar, or right-click it and choose Move up or Move down. New boards go to the end of the list.
+- Pick existing tags from a list when tagging a reference.
+- Place the same image on a board more than once (drop it again, Ctrl+D or Alt+drag).
+- Drag several images at once from the Library panel.
+- Copy images with Ctrl+C or right-click → Copy image; paste them into other apps or onto another board.
 
 ## 0.1.1
 

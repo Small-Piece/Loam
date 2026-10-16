@@ -6,6 +6,7 @@ import {
   type SuggestionService,
 } from '@loam/core'
 import type { AiController } from './ai/controller.ts'
+import type { ClipboardPort } from './clipboardPort.ts'
 import { createHandlers } from './handlers.ts'
 import { browserDataDir, databasePath, filesDir } from './paths.ts'
 
@@ -46,6 +47,8 @@ describe('desktop handlers', () => {
     copySample: () => {
       throw new Error('copySample should not be used')
     },
+    clipboard: unused<ClipboardPort>('clipboard'),
+    readBlob: () => Promise.reject(new Error('readBlob should not be used')),
   }
 
   it('replies to app:ping with the echoed message and the clock time', async () => {
@@ -99,6 +102,89 @@ describe('desktop handlers', () => {
     })
     expect(await handlers['bible:view']({ vaultId: 7 })).toEqual({ name: 'journal', vaultId: 7 })
     expect(await handlers['bible:view']({ vaultId: 1 })).toEqual({ name: 'bible', vaultId: 1 })
+  })
+})
+
+describe('copy and paste handlers', () => {
+  const clock = { now: () => new Date('2026-10-16T00:00:00.000Z') }
+  const unused = <T extends object>(name: string) =>
+    new Proxy({} as T, {
+      get: () => () => {
+        throw new Error(`${name} should not be used`)
+      },
+    })
+
+  /** A clipboard that records writes and returns a chosen marker. */
+  function fakeClipboard(onClipboard: { mark: string | null; hasImage: boolean }) {
+    const writes: Array<{ image: { bytes: Uint8Array; mime: string } | null; mark: string }> = []
+    const port: ClipboardPort = {
+      writeCopy: async (image, mark) => {
+        writes.push({ image, mark })
+      },
+      readMark: async () => onClipboard,
+    }
+    return { port, writes }
+  }
+
+  function handlersWith(references: ReferenceService, clipboard: ClipboardPort) {
+    return createHandlers({
+      clock,
+      references,
+      bible: unused<BibleService>('bible'),
+      journal: unused<BibleService>('journal'),
+      suggestedJournalFolder: 'unused',
+      about: unused<() => never>('about'),
+      notices: () => '',
+      pickFolder: async () => null,
+      copySample: () => '',
+      openExternal: async () => false,
+      suggestions: unused<SuggestionService>('suggestions'),
+      ai: unused<AiController>('ai'),
+      clipboard,
+      readBlob: async (hash) => new TextEncoder().encode(`bytes of ${hash}`),
+    })
+  }
+
+  it('writes the shared image and the marker in one write; nothing when nothing is copied', async () => {
+    const { port, writes } = fakeClipboard({ mark: null, hasImage: false })
+    const plans = [
+      { ids: [4, 2], shared: { id: 4, imageHash: 'h4', imageMime: 'image/png' }, mark: 'M' },
+      { ids: [], shared: null, mark: 'empty' },
+    ]
+    const references = {
+      prepareCopy: (ids: number[], shareable: (mime: string) => boolean) => {
+        expect(ids).toEqual([4, 2])
+        expect([shareable('image/png'), shareable('image/jpeg'), shareable('image/gif')]).toEqual([
+          true,
+          true,
+          false,
+        ])
+        return plans.shift()
+      },
+    } as unknown as ReferenceService
+    const handlers = handlersWith(references, port)
+    expect(await handlers['refs:copyImages']({ ids: [4, 2] })).toEqual({ ids: [4, 2], sharedId: 4 })
+    expect(writes).toHaveLength(1)
+    expect(writes[0]?.mark).toBe('M')
+    expect(writes[0]?.image?.mime).toBe('image/png')
+    expect(new TextDecoder().decode(writes[0]?.image?.bytes)).toBe('bytes of h4')
+    expect(await handlers['refs:copyImages']({ ids: [4, 2] })).toEqual({ ids: [], sharedId: null })
+    expect(writes).toHaveLength(1)
+  })
+
+  it('a paste hands what is on the clipboard to the service', async () => {
+    const { port } = fakeClipboard({ mark: 'M', hasImage: true })
+    const references = {
+      pasteCopied: (mark: string | null, hasImage: boolean, boardId: number | null) => ({
+        ids: mark === 'M' && hasImage && boardId === 3 ? [9] : [],
+        itemIds: [],
+      }),
+    } as unknown as ReferenceService
+    const handlers = handlersWith(references, port)
+    expect(await handlers['refs:pasteCopied']({ boardId: 3, at: null })).toEqual({
+      ids: [9],
+      itemIds: [],
+    })
   })
 })
 

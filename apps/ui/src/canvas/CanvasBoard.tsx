@@ -21,6 +21,7 @@ import {
   type ResponseOf,
 } from '@loam/protocol'
 import { call } from '../api.ts'
+import { ContextMenu, copyMenuItems } from '../board/ContextMenu.tsx'
 import {
   fitView,
   intersects,
@@ -41,13 +42,14 @@ import {
   center,
   childrenOf,
   contains,
+  copyItems,
   drawOrder,
   groupAtPoint,
   groupBounds,
   groupKey,
   groupOf,
   itemKey,
-  itemsByRef,
+  itemsById,
   NOTE_FONT,
   noteBox,
   noteKey,
@@ -88,6 +90,8 @@ interface Props {
   /** An edit Ctrl+Z can revert by applying these steps. */
   onUndoable: (undo: CanvasOp[], message: string) => void
   onOpenViewer: (cards: ReferenceCard[], index: number) => void
+  /** Copies these references' images to the clipboard (Ctrl+C, right-click → Copy image). */
+  onCopy: (referenceIds: number[]) => void
   onError: (message: string) => void
 }
 
@@ -104,6 +108,8 @@ type Gesture =
       loose: ReadonlySet<ObjectKey>
       moved: boolean
       preview: CanvasState | null
+      /** Alt+drag: these items stay, and copies of them are dragged instead. */
+      copyOf: ReadonlySet<number> | null
     }
   | {
       kind: 'scale'
@@ -132,6 +138,8 @@ const DRAG_THRESHOLD = 3
 const MIN_NOTE_WIDTH = 40
 const DRAFT = -1
 const EMPTY: CanvasState = { items: [], groups: [], notes: [] }
+/** How far Ctrl+D moves a copy from its original, in screen pixels. */
+const DUPLICATE_OFFSET_PX = 24
 
 function viewStorageKey(boardId: number): string {
   return `loam.canvasView.${boardId}`
@@ -176,6 +184,7 @@ function toState(view: CanvasView): CanvasState {
 
 function itemInput(item: CanvasItem) {
   return {
+    id: item.id,
     referenceId: item.referenceId,
     x: item.x,
     y: item.y,
@@ -189,6 +198,25 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** A new placement to save: what putItems takes for an item that has no id yet. */
+function newItemInput(item: CanvasItem & { key: string }) {
+  const { id: _unsaved, ...fields } = itemInput(item)
+  return { ...fields, key: item.key }
+}
+
+/**
+ * The references of these items, each once, in reading order (rows top to bottom,
+ * then left to right), so "the first" is the one a person reads first.
+ */
+function referencesInReadingOrder(items: readonly CanvasItem[]): number[] {
+  return [...new Set(readingOrder(items).map((item) => item.referenceId))]
+}
+
+/** Reference ids on the board, each once (an image can be placed several times). */
+function referenceIdsOf(items: readonly CanvasItem[]): number[] {
+  return [...new Set(items.map((item) => item.referenceId))]
+}
+
 /** Moves images and notes by (dx, dy) canvas units; attached notes moved alone shift their offset. */
 function moveObjects(
   state: CanvasState,
@@ -196,20 +224,32 @@ function moveObjects(
   dx: number,
   dy: number,
 ): CanvasState {
-  const refs = itemsByRef(state.items)
+  const items = itemsById(state.items)
   return {
     groups: state.groups,
     items: state.items.map((item) =>
-      moving.has(itemKey(item.referenceId)) ? { ...item, x: item.x + dx, y: item.y + dy } : item,
+      moving.has(itemKey(item.id)) ? { ...item, x: item.x + dx, y: item.y + dy } : item,
     ),
     notes: state.notes.map((note) => {
       if (!moving.has(noteKey(note.id))) return note
-      if (note.attachedReferenceId === null) return { ...note, x: note.x + dx, y: note.y + dy }
-      if (moving.has(itemKey(note.attachedReferenceId))) return note
-      const image = refs.get(note.attachedReferenceId)
+      if (note.attachedItemId === null) return { ...note, x: note.x + dx, y: note.y + dy }
+      if (moving.has(itemKey(note.attachedItemId))) return note
+      const image = items.get(note.attachedItemId)
       return image ? { ...note, x: note.x + dx / image.scale, y: note.y + dy / image.scale } : note
     }),
   }
+}
+
+/**
+ * Unsaved copies of items for an Alt+drag, with temporary negative ids so they can be
+ * drawn and dragged before the edit gives them real ones.
+ */
+function withDragCopies(
+  state: CanvasState,
+  ids: ReadonlySet<number>,
+): { state: CanvasState; copies: Array<CanvasItem & { key: string }> } {
+  const copies = copyItems(ids, state, 0, 0).map((copy, index) => ({ ...copy, id: -2 - index }))
+  return { state: { ...state, items: [...state.items, ...copies] }, copies }
 }
 
 /**
@@ -225,6 +265,7 @@ export function CanvasBoard({
   onItemsLoaded,
   onUndoable,
   onOpenViewer,
+  onCopy,
   onError,
 }: Props) {
   const [state, setState] = useState<CanvasState>(EMPTY)
@@ -239,6 +280,8 @@ export function CanvasBoard({
   const [box, setBox] = useState<Box | null>(null)
   const [panReady, setPanReady] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  /** The right-click menu on images: the references it copies, at the pointer. */
+  const [menu, setMenu] = useState<{ ids: number[]; x: number; y: number } | null>(null)
   const stage = useRef<HTMLDivElement>(null)
   const world = useRef<HTMLDivElement>(null)
   const view = useRef<View>({ x: 0, y: 0, scale: 1 })
@@ -252,9 +295,9 @@ export function CanvasBoard({
   const images = useRef(new Map<number, HTMLImageElement>())
   const detail = useRef(new Map<number, Detail>())
   const viewReady = useRef(false)
-  const callbacks = useRef({ onItemsLoaded, onUndoable, onOpenViewer, onError })
+  const callbacks = useRef({ onItemsLoaded, onUndoable, onOpenViewer, onCopy, onError })
   useEffect(() => {
-    callbacks.current = { onItemsLoaded, onUndoable, onOpenViewer, onError }
+    callbacks.current = { onItemsLoaded, onUndoable, onOpenViewer, onCopy, onError }
   })
   useEffect(() => {
     stateRef.current = state
@@ -262,7 +305,7 @@ export function CanvasBoard({
   }, [state, noteSizes])
 
   const order = useMemo(() => drawOrder(state), [state])
-  const refs = useMemo(() => itemsByRef(state.items), [state.items])
+  const itemMap = useMemo(() => itemsById(state.items), [state.items])
   const groups = useMemo(() => byId(state.groups), [state.groups])
 
   const viewport = useCallback(() => {
@@ -282,7 +325,7 @@ export function CanvasBoard({
     const { x, y, scale } = view.current
     const density = window.devicePixelRatio || 1
     for (const item of stateRef.current.items) {
-      const img = images.current.get(item.referenceId)
+      const img = images.current.get(item.id)
       if (!img) continue
       const drawn = itemBox(item)
       const onScreen: Box = {
@@ -295,22 +338,22 @@ export function CanvasBoard({
         item.imageWidth > item.thumbWidth &&
         onScreen.width * density > item.thumbWidth * 1.1 &&
         intersects(onScreen, screen)
-      const current = detail.current.get(item.referenceId) ?? 'thumb'
+      const current = detail.current.get(item.id) ?? 'thumb'
       if (want && current === 'thumb') {
-        detail.current.set(item.referenceId, 'loading')
+        detail.current.set(item.id, 'loading')
         const original = new Image()
         original.src = assetUrl(item.imageHash)
         original
           .decode()
           .then(() => {
-            if (detail.current.get(item.referenceId) !== 'loading') return
+            if (detail.current.get(item.id) !== 'loading') return
             img.src = original.src
-            detail.current.set(item.referenceId, 'full')
+            detail.current.set(item.id, 'full')
           })
-          .catch(() => detail.current.set(item.referenceId, 'thumb'))
+          .catch(() => detail.current.set(item.id, 'thumb'))
       } else if (!want && current !== 'thumb') {
         // Drop the original as soon as it is small or off screen, so memory stays bounded.
-        detail.current.set(item.referenceId, 'thumb')
+        detail.current.set(item.id, 'thumb')
         img.src = assetUrl(item.thumbHash)
       }
     }
@@ -356,7 +399,7 @@ export function CanvasBoard({
           detail.current.clear()
           setState(toState(response))
           setLoaded(true)
-          callbacks.current.onItemsLoaded(response.items.map((item) => item.referenceId))
+          callbacks.current.onItemsLoaded(referenceIdsOf(response.items))
         })
         .catch(reportError)
     },
@@ -452,7 +495,7 @@ export function CanvasBoard({
         const result = await call('canvas:apply', { boardId, ops })
         setState(toState(result.view))
         if (result.undo.length > 0) callbacks.current.onUndoable(result.undo, message)
-        callbacks.current.onItemsLoaded(result.view.items.map((item) => item.referenceId))
+        callbacks.current.onItemsLoaded(referenceIdsOf(result.view.items))
         return result
       } catch (error) {
         reportError(error)
@@ -492,7 +535,7 @@ export function CanvasBoard({
       }
       // Notes attached to moving images follow them through their offset.
       for (const note of current.notes) {
-        if (note.attachedReferenceId !== null && moving.has(itemKey(note.attachedReferenceId))) {
+        if (note.attachedItemId !== null && moving.has(itemKey(note.attachedItemId))) {
           moving.delete(noteKey(note.id))
           loose.delete(noteKey(note.id))
         }
@@ -504,9 +547,9 @@ export function CanvasBoard({
 
   /** Writes positions for a preview state straight to the DOM (images, notes, group frames). */
   const paintPreview = useCallback((preview: CanvasState) => {
-    const previewRefs = itemsByRef(preview.items)
+    const previewItems = itemsById(preview.items)
     for (const item of preview.items) {
-      const el = elements.current.get(itemKey(item.referenceId))
+      const el = elements.current.get(itemKey(item.id))
       if (!el) continue
       el.style.left = `${item.x}px`
       el.style.top = `${item.y}px`
@@ -515,7 +558,7 @@ export function CanvasBoard({
     }
     for (const note of preview.notes) {
       const el = elements.current.get(noteKey(note.id))
-      const at = notePosition(note, previewRefs)
+      const at = notePosition(note, previewItems)
       if (!el || !at) continue
       el.style.left = `${at.x}px`
       el.style.top = `${at.y}px`
@@ -546,7 +589,7 @@ export function CanvasBoard({
         z = Math.max(z, groups.get(parsed.id)?.z ?? 0)
       } else if (
         parsed.kind === 'n' &&
-        current.notes.find((n) => n.id === parsed.id)?.attachedReferenceId != null
+        current.notes.find((n) => n.id === parsed.id)?.attachedItemId != null
       ) {
         continue // an attached note follows its image
       } else {
@@ -554,7 +597,7 @@ export function CanvasBoard({
         const group = groupOf(key, current)
         const own =
           parsed.kind === 'i'
-            ? current.items.find((item) => item.referenceId === parsed.id)?.z
+            ? current.items.find((item) => item.id === parsed.id)?.z
             : current.notes.find((note) => note.id === parsed.id)?.z
         z = Math.max(z, group === null ? (own ?? 0) : (groups.get(group)?.z ?? 0))
       }
@@ -567,7 +610,7 @@ export function CanvasBoard({
       },
     ]
     const items = current.items
-      .filter((item) => members.has(itemKey(item.referenceId)))
+      .filter((item) => members.has(itemKey(item.id)))
       .map((item) => ({ ...itemInput(item), groupId: null, groupKey: 'new' }))
     const notes = current.notes
       .filter((note) => members.has(noteKey(note.id)))
@@ -638,7 +681,7 @@ export function CanvasBoard({
         }
       }
       if (noteIds.size > 0) ops.push({ op: 'deleteNotes', ids: [...noteIds] })
-      if (itemIds.size > 0) ops.push({ op: 'removeItems', referenceIds: [...itemIds] })
+      if (itemIds.size > 0) ops.push({ op: 'removeItems', itemIds: [...itemIds] })
       if (groupIds.length > 0) ops.push({ op: 'deleteGroups', ids: groupIds })
       const parts: string[] = []
       if (itemIds.size > 0)
@@ -651,6 +694,39 @@ export function CanvasBoard({
     },
     [edit, selected],
   )
+
+  /** Saves copies of items as new placements and selects the copies. */
+  const saveCopies = useCallback(
+    async (copies: Array<CanvasItem & { key: string }>, optimistic?: CanvasState) => {
+      if (copies.length === 0) return
+      const result = await edit(
+        [{ op: 'putItems', items: copies.map(newItemInput) }],
+        `Copied ${plural(copies.length, 'image')}`,
+        optimistic,
+      )
+      if (result) setSelected(new Set(Object.values(result.created.items).map(itemKey)))
+    },
+    [edit],
+  )
+
+  /** Ctrl+D: copies the selected images, slightly offset; the copies join the same groups. */
+  const duplicateSelection = useCallback(() => {
+    const ids = new Set<number>()
+    for (const key of selected) {
+      const parsed = parseKey(key)
+      if (parsed?.kind === 'i') ids.add(parsed.id)
+    }
+    const offset = DUPLICATE_OFFSET_PX / view.current.scale
+    void saveCopies(copyItems(ids, stateRef.current, offset, offset))
+  }, [saveCopies, selected])
+
+  /** Ctrl+C: copies the images of the selected items (groups and notes are not copied). */
+  const copySelection = useCallback(() => {
+    const items = stateRef.current.items.filter((item) => selected.has(itemKey(item.id)))
+    const ids = referencesInReadingOrder(items)
+    if (ids.length > 0) callbacks.current.onCopy(ids)
+    return ids.length > 0
+  }, [selected])
 
   const restackSelected = useCallback(
     (direction: 'front' | 'back') => {
@@ -680,7 +756,7 @@ export function CanvasBoard({
       color: 'paper',
       background: true,
       z: top + 1,
-      attachedReferenceId: null,
+      attachedItemId: null,
       groupId: null,
     })
     setEditingNote(DRAFT)
@@ -757,14 +833,14 @@ export function CanvasBoard({
     const id = [...selected].map(parseKey).find((p) => p?.kind === 'n')?.id
     const note = current.notes.find((entry) => entry.id === id)
     if (!note) return
-    const area = noteBox(note, itemsByRef(current.items), sizesRef.current)
+    const area = noteBox(note, itemsById(current.items), sizesRef.current)
     if (!area) return
-    if (note.attachedReferenceId !== null) {
+    if (note.attachedItemId !== null) {
       void edit(
         [
           {
             op: 'putNotes',
-            notes: [{ ...note, x: area.x, y: area.y, attachedReferenceId: null, groupId: null }],
+            notes: [{ ...note, x: area.x, y: area.y, attachedItemId: null, groupId: null }],
           },
         ],
         'Detached note',
@@ -781,7 +857,7 @@ export function CanvasBoard({
       [
         {
           op: 'putNotes',
-          notes: [{ ...note, ...offset, attachedReferenceId: target.referenceId, groupId: null }],
+          notes: [{ ...note, ...offset, attachedItemId: target.id, groupId: null }],
         },
       ],
       'Attached note to image',
@@ -812,6 +888,11 @@ export function CanvasBoard({
       } else if (event.key === 'Delete' && selected.size > 0) {
         event.preventDefault()
         void deleteSelection()
+      } else if (ctrl && key === 'd') {
+        event.preventDefault()
+        duplicateSelection()
+      } else if (ctrl && key === 'c') {
+        if (copySelection()) event.preventDefault()
       } else if (ctrl && key === 'a') {
         event.preventDefault()
         setSelected(new Set(topLevel(stateRef.current)))
@@ -847,7 +928,9 @@ export function CanvasBoard({
       window.removeEventListener('blur', onBlur)
     }
   }, [
+    copySelection,
     deleteSelection,
+    duplicateSelection,
     fitAll,
     groupDialog,
     groupSelection,
@@ -922,7 +1005,7 @@ export function CanvasBoard({
     if (handle && ownerKey) {
       const owner = parseKey(ownerKey)
       if (owner?.kind === 'i') {
-        const item = current.items.find((entry) => entry.referenceId === owner.id)
+        const item = current.items.find((entry) => entry.id === owner.id)
         if (item) {
           gesture.current = {
             kind: 'scale',
@@ -960,6 +1043,15 @@ export function CanvasBoard({
       }
       setSelected(next)
       const { moving, loose } = movingSet(next)
+      // Alt+drag on an image drags copies of the selected images and leaves them in place.
+      let copyOf: Set<number> | null = null
+      if (event.altKey && !toggle && parseKey(chosen)?.kind === 'i') {
+        copyOf = new Set()
+        for (const key of next) {
+          const parsed = parseKey(key)
+          if (parsed?.kind === 'i') copyOf.add(parsed.id)
+        }
+      }
       gesture.current = {
         kind: 'move',
         x: event.clientX,
@@ -969,6 +1061,7 @@ export function CanvasBoard({
         loose,
         moved: false,
         preview: null,
+        copyOf,
       }
       return
     }
@@ -1000,6 +1093,16 @@ export function CanvasBoard({
       const dx = event.clientX - current.x
       const dy = event.clientY - current.y
       if (!current.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return
+      if (!current.moved && current.copyOf) {
+        // The drag becomes a copy: draw the copies over the originals and move those.
+        const { state: withCopies, copies } = withDragCopies(current.start, current.copyOf)
+        const keys = new Set(copies.map((copy) => itemKey(copy.id)))
+        current.start = withCopies
+        current.moving = keys
+        current.loose = keys
+        setState(withCopies)
+        setSelected(keys)
+      }
       current.moved = true
       current.preview = moveObjects(current.start, current.moving, dx / scale, dy / scale)
       paintPreview(current.preview)
@@ -1012,12 +1115,12 @@ export function CanvasBoard({
       current.preview = {
         ...current.start,
         items: current.start.items.map((item) =>
-          item.referenceId === next.referenceId ? { ...item, ...next } : item,
+          item.id === current.item.id ? { ...item, ...next } : item,
         ),
       }
       paintPreview(current.preview)
     } else if (current.kind === 'width') {
-      const at = notePosition(current.note, itemsByRef(current.start.items))
+      const at = notePosition(current.note, itemsById(current.start.items))
       if (!at) return
       const width = Math.max(MIN_NOTE_WIDTH, toCanvas(view.current, localPoint(event)).x - at.x)
       current.preview = {
@@ -1050,10 +1153,10 @@ export function CanvasBoard({
       const snapshot = stateRef.current
       const hits = new Set<ObjectKey>()
       for (const item of snapshot.items) {
-        if (intersects(itemBox(item), area)) hits.add(clickTarget(itemKey(item.referenceId), false))
+        if (intersects(itemBox(item), area)) hits.add(clickTarget(itemKey(item.id), false))
       }
       for (const note of snapshot.notes) {
-        const noteArea = noteBox(note, itemsByRef(snapshot.items), sizesRef.current)
+        const noteArea = noteBox(note, itemsById(snapshot.items), sizesRef.current)
         if (noteArea && intersects(noteArea, area)) hits.add(clickTarget(noteKey(note.id), false))
       }
       setSelected(new Set(current.additive ? [...current.base, ...hits] : hits))
@@ -1069,12 +1172,16 @@ export function CanvasBoard({
     if (!current) return
     if (current.kind === 'pan') {
       saveView(boardId, view.current)
+    } else if (current.kind === 'move' && current.moved && current.preview && current.copyOf) {
+      const preview = current.preview
+      const copies = preview.items.flatMap((item) =>
+        item.id < 0 ? [{ ...item, key: `copy${-2 - item.id}` }] : [],
+      )
+      void saveCopies(copies, preview)
     } else if (current.kind === 'move' && current.moved && current.preview) {
       void finishMove(current.start, current.preview, current.moving, current.loose, event.shiftKey)
     } else if (current.kind === 'scale' && current.preview) {
-      const item = current.preview.items.find(
-        (entry) => entry.referenceId === current.item.referenceId,
-      )
+      const item = current.preview.items.find((entry) => entry.id === current.item.id)
       if (item)
         void edit(
           [{ op: 'putItems', items: [itemInput(item)] }],
@@ -1113,13 +1220,13 @@ export function CanvasBoard({
         if (shift) {
           // Shift-drop on an image attaches the note to it.
           const target = attachTarget(area, next)
-          if (target && target.referenceId !== note.attachedReferenceId) {
+          if (target && target.id !== note.attachedItemId) {
             const offset = attachOffset(area, target)
             next = {
               ...next,
               notes: next.notes.map((entry) =>
                 entry.id === note.id
-                  ? { ...entry, ...offset, attachedReferenceId: target.referenceId, groupId: null }
+                  ? { ...entry, ...offset, attachedItemId: target.id, groupId: null }
                   : entry,
               ),
             }
@@ -1127,7 +1234,7 @@ export function CanvasBoard({
             continue
           }
         }
-        if (note.attachedReferenceId !== null) continue
+        if (note.attachedItemId !== null) continue
       }
       const currentGroup = groupOf(key, next)
       let groupId = currentGroup
@@ -1144,7 +1251,7 @@ export function CanvasBoard({
             ? {
                 ...next,
                 items: next.items.map((item) =>
-                  item.referenceId === parsed.id ? { ...item, groupId } : item,
+                  item.id === parsed.id ? { ...item, groupId } : item,
                 ),
               }
             : {
@@ -1156,7 +1263,7 @@ export function CanvasBoard({
       }
     }
     const changedItems = next.items.filter((item) => {
-      const before = start.items.find((entry) => entry.referenceId === item.referenceId)
+      const before = start.items.find((entry) => entry.id === item.id)
       return (
         !before || before.x !== item.x || before.y !== item.y || before.groupId !== item.groupId
       )
@@ -1207,8 +1314,15 @@ export function CanvasBoard({
       setSelected(new Set([hit]))
       return
     }
-    const orderForViewer = readingOrder(stateRef.current.items)
-    const index = orderForViewer.findIndex((item) => item.referenceId === parsed.id)
+    // The viewer steps through each image once, even when it is placed several times.
+    const seen = new Set<number>()
+    const orderForViewer = readingOrder(stateRef.current.items).filter((item) => {
+      if (seen.has(item.referenceId)) return false
+      seen.add(item.referenceId)
+      return true
+    })
+    const clicked = itemMap.get(parsed.id)
+    const index = orderForViewer.findIndex((item) => item.referenceId === clicked?.referenceId)
     if (index < 0) return
     callbacks.current.onOpenViewer(
       orderForViewer.map((item) => ({
@@ -1224,6 +1338,19 @@ export function CanvasBoard({
       })),
       index,
     )
+  }
+
+  /** Right-click on an image: a selected one copies the selected images, another only itself. */
+  function onContextMenu(event: MouseEvent<HTMLDivElement>) {
+    event.preventDefault()
+    const hit = keyAt(document.elementFromPoint(event.clientX, event.clientY))
+    const parsed = hit ? parseKey(hit) : null
+    if (!hit || parsed?.kind !== 'i') return
+    const current = stateRef.current
+    const keys = selected.has(hit) ? selected : new Set<ObjectKey>([hit])
+    if (!selected.has(hit)) setSelected(keys)
+    const items = current.items.filter((item) => keys.has(itemKey(item.id)))
+    setMenu({ ids: referencesInReadingOrder(items), x: event.clientX, y: event.clientY })
   }
 
   function onDragOver(event: DragEvent<HTMLDivElement>) {
@@ -1248,8 +1375,13 @@ export function CanvasBoard({
     }
     if (ids.length === 0) return
     try {
-      await call('boards:addRefs', { boardId, ids, at: toCanvas(view.current, localPoint(event)) })
-      setSelected(new Set(ids.map(itemKey)))
+      // Each dropped image gets a new placement, also when it is on the board already.
+      const { itemIds } = await call('boards:addRefs', {
+        boardId,
+        ids,
+        at: toCanvas(view.current, localPoint(event)),
+      })
+      setSelected(new Set(itemIds.map(itemKey)))
       reload()
     } catch (error) {
       reportError(error)
@@ -1265,7 +1397,7 @@ export function CanvasBoard({
   const hasContent = state.items.length + state.notes.length > 0
 
   function renderNote(note: BoardNote, key: string) {
-    const at = notePosition(note, refs)
+    const at = notePosition(note, itemMap)
     if (!at) return null
     const isSelected = key !== 'draft' && selected.has(key as ObjectKey)
     const editing = editingNote === note.id
@@ -1321,6 +1453,7 @@ export function CanvasBoard({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       onDoubleClick={onDoubleClick}
+      onContextMenu={onContextMenu}
       onDragOver={onDragOver}
       onDrop={(event) => void onDrop(event)}
       onAuxClick={(event) => event.preventDefault()}
@@ -1389,7 +1522,7 @@ export function CanvasBoard({
             const note = state.notes.find((entry) => entry.id === parsed.id)
             return note ? renderNote(note, key) : null
           }
-          const item = refs.get(parsed.id)
+          const item = itemMap.get(parsed.id)
           if (!item) return null
           const isSelected = selected.has(key)
           return (
@@ -1407,6 +1540,7 @@ export function CanvasBoard({
               data-key={key}
               data-testid="canvas-item"
               data-ref-id={item.referenceId}
+              data-item-id={item.id}
               role="img"
               aria-label={item.title}
               aria-selected={isSelected}
@@ -1419,8 +1553,8 @@ export function CanvasBoard({
             >
               <img
                 ref={(el) => {
-                  if (el) images.current.set(item.referenceId, el)
-                  else images.current.delete(item.referenceId)
+                  if (el) images.current.set(item.id, el)
+                  else images.current.delete(item.id)
                 }}
                 src={assetUrl(item.thumbHash)}
                 alt=""
@@ -1536,6 +1670,16 @@ export function CanvasBoard({
         />
       )}
 
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          label="Image actions"
+          items={copyMenuItems(menu.ids.length, () => onCopy(menu.ids))}
+          onClose={() => setMenu(null)}
+        />
+      )}
+
       {groupDialog && (
         <div className="modal-backdrop" onPointerDown={(event) => event.stopPropagation()}>
           <div
@@ -1580,8 +1724,8 @@ export function CanvasBoard({
           {selected.size > 0 ? `${selected.size} selected` : `${state.items.length} images`}
         </span>
         <span className="canvas-keys">
-          Space+drag pan · Wheel zoom · F fit · Ctrl+G group · Ctrl+N note · Alt+click inside group
-          · ] [ order · Del
+          Space+drag pan · Wheel zoom · F fit · Ctrl+G group · Ctrl+N note · Ctrl+D duplicate ·
+          Alt+drag copy · Ctrl+C copy image · Alt+click inside group · ] [ order · Del
         </span>
       </div>
     </div>

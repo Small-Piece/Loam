@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
+import { setWindowContentSize } from '../support/windowSize.ts'
 import { assertBuilt, launchApp } from './launch.ts'
 
 // Temp data folder only: 250 generated references, as in daily use with a large library.
@@ -121,9 +122,7 @@ test('with 250 references the canvas Library panel shows every tile at full heig
   await expectTilesVisible(tiles)
 
   // A narrow window too.
-  await app.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0]?.setContentSize(900, 640)
-  })
+  await setWindowContentSize(app, { width: 900, height: 640 })
   await tiles.first().scrollIntoViewIfNeeded()
   await expectTilesVisible(tiles)
 })

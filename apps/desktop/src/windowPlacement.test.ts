@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chooseDisplay, placeOn, type DisplayInfo } from './windowPlacement.ts'
+import { chooseAnchor, chooseDisplay, placeOn, type DisplayInfo } from './windowPlacement.ts'
 
 const primary: DisplayInfo = { id: 1, workArea: { x: 0, y: 0, width: 2560, height: 1400 } }
 const left: DisplayInfo = { id: 2, workArea: { x: -1920, y: 100, width: 1920, height: 1040 } }
@@ -47,6 +47,69 @@ describe('placeOn', () => {
       y: 0,
       width: 1024,
       height: 700,
+    })
+  })
+})
+
+describe('chooseAnchor', () => {
+  it('"bottom" anchors to the bottom; unset or anything else keeps the center', () => {
+    expect(chooseAnchor('bottom')).toBe('bottom')
+    expect(chooseAnchor(' bottom ')).toBe('bottom')
+    expect(chooseAnchor(undefined)).toBe('center')
+    expect(chooseAnchor('')).toBe('center')
+    expect(chooseAnchor('center')).toBe('center')
+    expect(chooseAnchor('top')).toBe('center')
+  })
+})
+
+describe('placeOn with the bottom anchor', () => {
+  const size = { width: 1280, height: 820 }
+
+  it('puts the bottom edge on the work area bottom, centered horizontally', () => {
+    const { bounds, inactive } = placeOn(primary, size, 'bottom')
+    expect(bounds).toEqual({ x: 640, y: 580, width: 1280, height: 820 })
+    expect(bounds.y + bounds.height).toBe(primary.workArea.y + primary.workArea.height)
+    expect(bounds.x - primary.workArea.x).toBe(
+      primary.workArea.x + primary.workArea.width - (bounds.x + bounds.width),
+    )
+    expect(inactive).toBe(true)
+  })
+
+  it('keeps the size it would have centered', () => {
+    const centered = placeOn(left, size)
+    const bottom = placeOn(left, size, 'bottom')
+    expect(bottom.bounds.width).toBe(centered.bounds.width)
+    expect(bottom.bounds.height).toBe(centered.bounds.height)
+    expect(bottom.bounds.x).toBe(centered.bounds.x)
+  })
+
+  it('works on a display with a negative or offset origin', () => {
+    // left: x -1920, y 100, 1920 x 1040, so its work area ends at y 1140.
+    expect(placeOn(left, size, 'bottom').bounds).toEqual({
+      x: -1600,
+      y: 320,
+      width: 1280,
+      height: 820,
+    })
+    const above: DisplayInfo = { id: 4, workArea: { x: 300, y: -1080, width: 1920, height: 1032 } }
+    const bounds = placeOn(above, size, 'bottom').bounds
+    expect(bounds).toEqual({ x: 620, y: -868, width: 1280, height: 820 })
+    expect(bounds.y + bounds.height).toBe(-48)
+  })
+
+  it('shrinks the window to fit a small display', () => {
+    expect(placeOn(small, size, 'bottom').bounds).toEqual({
+      x: 2560,
+      y: 0,
+      width: 1024,
+      height: 700,
+    })
+    const short: DisplayInfo = { id: 5, workArea: { x: 0, y: 40, width: 1600, height: 760 } }
+    expect(placeOn(short, size, 'bottom').bounds).toEqual({
+      x: 160,
+      y: 40,
+      width: 1280,
+      height: 760,
     })
   })
 })

@@ -155,7 +155,7 @@ describe('migrateDataFolder', () => {
       from: old,
       to: loam,
       migratedAt: '2026-10-14T03:00:00.000Z',
-      schemaVersion: 11,
+      schemaVersion: 12,
       references: 5,
       files: { count: 5 },
       backups: { count: 2 },

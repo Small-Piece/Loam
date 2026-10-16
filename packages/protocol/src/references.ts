@@ -16,7 +16,10 @@ const coordinate = z.number().finite().min(-1e9).max(1e9)
 const point = z.strictObject({ x: coordinate, y: coordinate })
 const viewMode = z.enum(['canvas', 'grid'])
 
-/** Where a reference sits on a board's canvas. Drawn size = image size x scale. */
+/**
+ * Where a reference sits on a board's canvas. Drawn size = image size x scale.
+ * A reference can be placed on one board several times; each placement is an item with its own id.
+ */
 export const placementSchema = z.strictObject({
   referenceId: id,
   x: coordinate,
@@ -60,7 +63,8 @@ export const noteSchema = z.strictObject({
   color: paletteSchema,
   background: z.boolean(),
   z: zOrder,
-  attachedReferenceId: id.nullable(),
+  /** The item (placement) the note is attached to; then x and y are offsets in its image's pixels. */
+  attachedItemId: id.nullable(),
   groupId: id.nullable(),
 })
 
@@ -70,9 +74,19 @@ const groupLink = { groupId: id.nullable(), groupKey: clientKey.optional() }
 export const canvasOpSchema = z.discriminatedUnion('op', [
   z.strictObject({
     op: z.literal('putItems'),
-    items: z.array(z.strictObject({ ...placementSchema.shape, ...groupLink })).max(10_000),
+    /** With an id: that item changes (or comes back, for undo). Without: a new placement. */
+    items: z
+      .array(
+        z.strictObject({
+          ...placementSchema.shape,
+          ...groupLink,
+          id: id.optional(),
+          key: clientKey.optional(),
+        }),
+      )
+      .max(10_000),
   }),
-  z.strictObject({ op: z.literal('removeItems'), referenceIds: z.array(id).max(10_000) }),
+  z.strictObject({ op: z.literal('removeItems'), itemIds: z.array(id).max(10_000) }),
   z.strictObject({
     op: z.literal('putGroups'),
     groups: z
@@ -103,6 +117,7 @@ export const canvasOpSchema = z.discriminatedUnion('op', [
 ])
 
 export const canvasItemSchema = z.strictObject({
+  id,
   ...placementSchema.shape,
   groupId: id.nullable(),
   title: z.string(),
@@ -127,6 +142,12 @@ export const referenceCardSchema = z.strictObject({
   imageWidth: dimension,
   imageHeight: dimension,
   tags: z.array(z.string()),
+})
+
+/** A tag and how many references (not in the Trash) use it. */
+export const tagCountSchema = z.strictObject({
+  name: z.string(),
+  count: z.number().int().positive(),
 })
 
 export const referenceDetailSchema = z.strictObject({
@@ -201,7 +222,7 @@ export const referenceMessages = {
       boards: z.array(boardSummarySchema),
       totalCount: z.number().int().nonnegative(),
       trashCount: z.number().int().nonnegative(),
-      tags: z.array(z.strictObject({ name: z.string(), count: z.number().int().positive() })),
+      tags: z.array(tagCountSchema),
       items: z.array(referenceCardSchema),
     }),
   },
@@ -211,6 +232,8 @@ export const referenceMessages = {
       detail: referenceDetailSchema.nullable(),
       /** Tags a local model suggested, not yet accepted (never searched or filtered on). */
       suggestions: z.array(z.strictObject({ tag: z.string(), confidence: z.number() })),
+      /** Every tag in the Library (whatever board is open), for the tag picker. */
+      allTags: z.array(tagCountSchema),
     }),
   },
   /** One drop or paste: all images in a single round trip. */
@@ -246,7 +269,11 @@ export const referenceMessages = {
       tags: z.array(tagName).max(30).optional(),
       boardIds: z.array(id).max(500).optional(),
     }),
-    response: z.strictObject({ detail: referenceDetailSchema.nullable() }),
+    /** allTags: the Library's tags after the edit, so the tag picker stays current. */
+    response: z.strictObject({
+      detail: referenceDetailSchema.nullable(),
+      allTags: z.array(tagCountSchema),
+    }),
   },
   'boards:create': {
     request: z.strictObject({ name: z.string().min(1).max(80) }),
@@ -289,10 +316,34 @@ export const referenceMessages = {
     request: z.strictObject({ boardId: id, ids: idList }),
     response: z.strictObject({ ids: z.array(id), undo: z.array(canvasOpSchema) }),
   },
-  /** Places Library references on a board, around `at` or below what is there. */
+  /**
+   * Places Library references on a board. Around `at` (a drop point) each gets a new
+   * placement, also when it is on the board already; without `at` the ones not on the
+   * board go below what is there. itemIds: the new placements.
+   */
   'boards:addRefs': {
     request: z.strictObject({ boardId: id, ids: idList, at: point.nullable() }),
-    response: z.strictObject({ ids: z.array(id) }),
+    response: z.strictObject({ ids: z.array(id), itemIds: z.array(id) }),
+  },
+  /**
+   * Copies references to the system clipboard: other apps get the full-size image
+   * of the first one that can be shared (PNG or JPEG), and Loam's private marker
+   * lists all of them. ids: the references copied; sharedId: the one other apps get.
+   */
+  'refs:copyImages': {
+    request: z.strictObject({ ids: idList }),
+    response: z.strictObject({ ids: z.array(id), sharedId: id.nullable() }),
+  },
+  /**
+   * Ctrl+V: when the clipboard holds Loam's own copy, uses those references
+   * instead of importing the clipboard image. On a canvas (`at` given) they get
+   * new placements; on a board without `at` they join it; in the Library nothing
+   * is imported. ids is empty when the clipboard is not Loam's copy (or none of
+   * its references is left), and the normal paste runs.
+   */
+  'refs:pasteCopied': {
+    request: z.strictObject({ boardId: id.nullable(), at: point.nullable() }),
+    response: z.strictObject({ ids: z.array(id), itemIds: z.array(id) }),
   },
   'boards:setViewMode': {
     request: z.strictObject({ boardId: id, mode: viewMode }),
@@ -304,8 +355,8 @@ export const referenceMessages = {
     response: canvasViewSchema,
   },
   /**
-   * One canvas edit (move, group, note, attach, remove...), applied atomically.
-   * Returns the new canvas, the steps that undo it, and ids of created groups and notes.
+   * One canvas edit (move, group, note, attach, duplicate, remove...), applied atomically.
+   * Returns the new canvas, the steps that undo it, and ids of created groups, notes and items.
    */
   'canvas:apply': {
     request: z.strictObject({ boardId: id, ops: z.array(canvasOpSchema).min(1).max(100) }),
@@ -315,6 +366,7 @@ export const referenceMessages = {
       created: z.strictObject({
         groups: z.record(clientKey, id),
         notes: z.record(clientKey, id),
+        items: z.record(clientKey, id),
       }),
     }),
   },

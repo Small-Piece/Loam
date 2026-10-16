@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { entryViewSchema, vaultViewSchema } from './bible.ts'
-import { referenceDetailSchema } from './references.ts'
+import { referenceDetailSchema, tagCountSchema } from './references.ts'
 
 const id = z.number().int().positive()
 
@@ -82,6 +82,7 @@ export const aiMessages = {
     response: z.strictObject({
       detail: referenceDetailSchema.nullable(),
       suggestions: z.array(suggestionSchema),
+      allTags: z.array(tagCountSchema),
     }),
   },
   /** Rejects a suggestion; it is not suggested again for that image. */

@@ -125,7 +125,10 @@ export interface EmptyTrashResult {
   deletedFiles: number
 }
 
-/** Where a reference sits on one board's canvas. Drawn size = image size x scale. */
+/**
+ * Where a reference sits on one board's canvas. Drawn size = image size x scale.
+ * One reference can be placed on a board several times; each placement is an item.
+ */
 export interface Placement {
   referenceId: number
   x: number
@@ -136,6 +139,8 @@ export interface Placement {
 
 /** A placement plus what the canvas needs to draw it. */
 export interface CanvasItem extends Placement {
+  /** The placement's own id (migration 0012_board_item_ids). */
+  id: number
   /** The group the item belongs to on this board, if any. */
   groupId: number | null
   title: string
@@ -186,10 +191,14 @@ export type PaletteColor = (typeof PALETTE)[number]
 export const NOTE_SIZES = ['S', 'M', 'L', 'XL'] as const
 export type NoteSize = (typeof NOTE_SIZES)[number]
 
-/** An item's full state on a board: where it is and which group it is in. */
+/** An item's full state on a board: which placement, where it is and which group it is in. */
 export interface ItemState extends Placement {
+  id: number
   groupId: number | null
 }
+
+/** A placement not saved yet: it gets its id when it is stored. */
+export type NewItem = Omit<ItemState, 'id'> & { id?: undefined }
 
 export interface BoardGroup {
   id: number
@@ -200,8 +209,8 @@ export interface BoardGroup {
 }
 
 /**
- * A text note on a board. When attachedReferenceId is set, x and y are the
- * offset from that image's top-left corner in the image's own pixels.
+ * A text note on a board. When attachedItemId is set, x and y are the offset
+ * from that placement's top-left corner in the image's own pixels.
  */
 export interface BoardNote {
   id: number
@@ -214,7 +223,7 @@ export interface BoardNote {
   color: PaletteColor
   background: boolean
   z: number
-  attachedReferenceId: number | null
+  attachedItemId: number | null
   groupId: number | null
 }
 
@@ -233,12 +242,14 @@ export type GroupInput = Omit<BoardGroup, 'id'> & {
 }
 export type NoteInput = Omit<BoardNote, 'id' | 'groupId'> &
   GroupLink & { id?: number | undefined; key?: string | undefined }
-export type ItemInput = Placement & GroupLink
+/** A placement to save: with an id it changes (or re-inserts) that item, without one it is new. */
+export type ItemInput = Placement &
+  GroupLink & { id?: number | undefined; key?: string | undefined }
 
 /** One step of a canvas edit. A whole edit applies atomically. */
 export type CanvasOp =
   | { op: 'putItems'; items: ItemInput[] }
-  | { op: 'removeItems'; referenceIds: number[] }
+  | { op: 'removeItems'; itemIds: number[] }
   | { op: 'putGroups'; groups: GroupInput[] }
   | { op: 'deleteGroups'; ids: number[] }
   | { op: 'putNotes'; notes: NoteInput[] }
@@ -248,6 +259,10 @@ export interface ApplyResult {
   view: CanvasView
   /** Applying these puts the board back exactly as it was before the edit. */
   undo: CanvasOp[]
-  /** Ids given to groups and notes created with a client key. */
-  created: { groups: Record<string, number>; notes: Record<string, number> }
+  /** Ids given to groups, notes and items created with a client key. */
+  created: {
+    groups: Record<string, number>
+    notes: Record<string, number>
+    items: Record<string, number>
+  }
 }

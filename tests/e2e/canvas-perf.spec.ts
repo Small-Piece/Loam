@@ -101,7 +101,13 @@ async function addGroupsAndNotes(
         ok: true
         data: {
           items: Array<
-            Record<string, unknown> & { referenceId: number; x: number; y: number; z: number }
+            Record<string, unknown> & {
+              id: number
+              referenceId: number
+              x: number
+              y: number
+              z: number
+            }
           >
         }
       }
@@ -116,6 +122,7 @@ async function addGroupsAndNotes(
         z: index,
       }))
       const placed = items.map((item, index) => ({
+        id: item.id,
         referenceId: item.referenceId,
         x: item.x,
         y: item.y,
@@ -138,7 +145,7 @@ lighting, value and edge study`,
           color: index % 5 === 0 ? 'amber' : 'paper',
           background: index % 2 === 1,
           z: 10_000 + index,
-          attachedReferenceId: attached ? item.referenceId : null,
+          attachedItemId: attached ? item.id : null,
           groupId: null,
         }
       })

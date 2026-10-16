@@ -9,6 +9,7 @@ import {
   type GroupInput,
   type GroupLink,
   type ItemState,
+  type NewItem,
   type NoteInput,
 } from './types.ts'
 
@@ -20,7 +21,7 @@ export const NOTE_LIMITS = { textLength: 10_000, minWidth: 10, maxWidth: 20_000 
 const GROUP_TITLE_LENGTH = 100
 const COORDINATE_LIMIT = 1e9
 
-/** Everything on one board, including items in the Trash, keyed by id. */
+/** Everything on one board, including items in the Trash, keyed by id (items by item id). */
 export interface BoardSnapshot {
   items: Map<number, ItemState>
   groups: Map<number, BoardGroup>
@@ -30,7 +31,8 @@ export interface BoardSnapshot {
 export function snapshotBoard(repository: ReferenceRepository, boardId: number): BoardSnapshot {
   const items = new Map<number, ItemState>()
   for (const item of repository.listCanvas(boardId, true)) {
-    items.set(item.referenceId, {
+    items.set(item.id, {
+      id: item.id,
       referenceId: item.referenceId,
       x: item.x,
       y: item.y,
@@ -82,12 +84,16 @@ function cleanNote(input: NoteInput): Omit<BoardNote, 'id' | 'groupId'> {
     color: input.color,
     background: input.background,
     z: input.z,
-    attachedReferenceId: input.attachedReferenceId,
+    attachedItemId: input.attachedItemId,
   }
 }
 
 export interface AppliedEdit {
-  created: { groups: Record<string, number>; notes: Record<string, number> }
+  created: {
+    groups: Record<string, number>
+    notes: Record<string, number>
+    items: Record<string, number>
+  }
 }
 
 /**
@@ -99,7 +105,11 @@ export function applyOps(
   boardId: number,
   ops: readonly CanvasOp[],
 ): AppliedEdit {
-  const created = { groups: {} as Record<string, number>, notes: {} as Record<string, number> }
+  const created = {
+    groups: {} as Record<string, number>,
+    notes: {} as Record<string, number>,
+    items: {} as Record<string, number>,
+  }
 
   function resolveGroup(link: GroupLink): number | null {
     if (link.groupKey !== undefined) {
@@ -113,6 +123,16 @@ export function applyOps(
     return link.groupId
   }
 
+  /** An item id must be one of this board's placements, of the same reference, or be free. */
+  function requireOwnItem(id: number, referenceId: number): void {
+    const owner = repository.itemOwner(id)
+    if (owner === null) return
+    if (owner.boardId !== boardId) throw new CanvasEditError('That item belongs to another board')
+    if (owner.referenceId !== referenceId) {
+      throw new CanvasEditError(`Item ${id} is a placement of another reference`)
+    }
+  }
+
   function requireOwn(kind: 'group' | 'note', id: number): void {
     const board = kind === 'group' ? repository.boardOfGroup(id) : repository.boardOfNote(id)
     if (board !== null && board !== boardId)
@@ -122,14 +142,20 @@ export function applyOps(
   for (const step of ops) {
     switch (step.op) {
       case 'putItems': {
-        const ids = step.items.map((item) => item.referenceId)
-        if (new Set(ids).size !== ids.length) throw new CanvasEditError('A reference appears twice')
-        const known = new Set(repository.imageSizes(ids).map((size) => size.referenceId))
-        const states: ItemState[] = step.items.map((item) => {
+        const itemIds = step.items.flatMap((item) => (item.id === undefined ? [] : [item.id]))
+        if (new Set(itemIds).size !== itemIds.length) {
+          throw new CanvasEditError('An item appears twice')
+        }
+        const keys = step.items.flatMap((item) => (item.key === undefined ? [] : [item.key]))
+        if (new Set(keys).size !== keys.length) throw new CanvasEditError('A key appears twice')
+        const refIds = [...new Set(step.items.map((item) => item.referenceId))]
+        const known = new Set(repository.imageSizes(refIds).map((size) => size.referenceId))
+        const states: Array<NewItem | ItemState> = step.items.map((item) => {
           if (!known.has(item.referenceId)) {
             throw new CanvasEditError(`Reference ${item.referenceId} does not exist`)
           }
-          const state = {
+          if (item.id !== undefined) requireOwnItem(item.id, item.referenceId)
+          const fields = {
             referenceId: item.referenceId,
             x: item.x,
             y: item.y,
@@ -137,16 +163,20 @@ export function applyOps(
             z: item.z,
             groupId: resolveGroup(item),
           }
-          if (!isValidPlacement(state)) {
+          if (!isValidPlacement(fields)) {
             throw new CanvasEditError(`Invalid placement for reference ${item.referenceId}`)
           }
-          return state
+          return item.id === undefined ? fields : { ...fields, id: item.id }
         })
-        repository.upsertItems(boardId, states)
+        const saved = repository.putItems(boardId, states)
+        step.items.forEach((item, index) => {
+          const id = saved[index]
+          if (item.key !== undefined && id !== undefined) created.items[item.key] = id
+        })
         break
       }
       case 'removeItems':
-        repository.removeFromBoard(boardId, step.referenceIds)
+        repository.removeItems(boardId, step.itemIds)
         break
       case 'putGroups':
         for (const group of step.groups) {
@@ -164,7 +194,7 @@ export function applyOps(
           if (note.id !== undefined) requireOwn('note', note.id)
           const clean = cleanNote(note)
           // A note attached to an image follows the image, not a group.
-          const groupId = clean.attachedReferenceId === null ? resolveGroup(note) : null
+          const groupId = clean.attachedItemId === null ? resolveGroup(note) : null
           const id = repository.putNote(boardId, { ...clean, groupId, id: note.id })
           if (note.key !== undefined) created.notes[note.key] = id
         }
@@ -176,10 +206,10 @@ export function applyOps(
     }
   }
 
-  // A note can only be attached to an image that is on this board.
-  const placed = new Set(repository.listCanvas(boardId, true).map((item) => item.referenceId))
+  // A note can only be attached to an item that is on this board.
+  const placed = new Set(repository.listCanvas(boardId, true).map((item) => item.id))
   for (const note of repository.listNotes(boardId, true)) {
-    if (note.attachedReferenceId !== null && !placed.has(note.attachedReferenceId)) {
+    if (note.attachedItemId !== null && !placed.has(note.attachedItemId)) {
       throw new CanvasEditError(`Note ${note.id} is attached to an image that is not on this board`)
     }
   }
@@ -202,7 +232,7 @@ export function inverseOps(before: BoardSnapshot, after: BoardSnapshot): CanvasO
     (group) => !sameJson(group, after.groups.get(group.id)),
   )
   const restoreItems = [...before.items.values()].filter(
-    (item) => !sameJson(item, after.items.get(item.referenceId)),
+    (item) => !sameJson(item, after.items.get(item.id)),
   )
   const restoreNotes = [...before.notes.values()].filter(
     (note) => !sameJson(note, after.notes.get(note.id)),
@@ -214,7 +244,7 @@ export function inverseOps(before: BoardSnapshot, after: BoardSnapshot): CanvasO
   const undo: CanvasOp[] = []
   if (restoreGroups.length > 0) undo.push({ op: 'putGroups', groups: restoreGroups })
   if (addedNotes.length > 0) undo.push({ op: 'deleteNotes', ids: addedNotes })
-  if (addedItems.length > 0) undo.push({ op: 'removeItems', referenceIds: addedItems })
+  if (addedItems.length > 0) undo.push({ op: 'removeItems', itemIds: addedItems })
   if (restoreItems.length > 0) undo.push({ op: 'putItems', items: restoreItems })
   if (restoreNotes.length > 0) {
     undo.push({ op: 'putNotes', notes: restoreNotes.map((note) => ({ ...note })) })

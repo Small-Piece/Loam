@@ -5,8 +5,8 @@ import { DatabaseSync } from 'node:sqlite'
 import { expect, test } from '@playwright/test'
 import { assertBuilt, launchApp, packagedExecutable } from './launch.ts'
 
-// 0001_init through 0005_groups_notes.
-const LATEST_SCHEMA_VERSION = '11'
+// 0001_init through 0012_board_item_ids.
+const LATEST_SCHEMA_VERSION = '12'
 
 let localAppData: string
 
@@ -50,8 +50,11 @@ test('shell loads and app:ping round-trips with typed rejection of bad input', a
       onPrimary: screen.getDisplayNearestPoint(center).id === primary.id,
       visible: window.isVisible(),
       focused: window.isFocused(),
-      // Read in the app's own environment: launch.ts always sets the LOAM_ name.
+      // Read in the app's own environment: launch.ts always sets the LOAM_ names.
       setting: process.env['LOAM_WINDOW_DISPLAY'] ?? '',
+      anchor: process.env['LOAM_WINDOW_ANCHOR'] ?? '',
+      bounds,
+      workArea: screen.getDisplayMatching(bounds).workArea,
     }
   })
   expect(placement.visible).toBe(true)

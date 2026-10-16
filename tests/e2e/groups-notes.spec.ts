@@ -47,7 +47,7 @@ interface View {
     fontSize: string
     color: string
     width: number | null
-    attachedReferenceId: number | null
+    attachedItemId: number | null
   }>
 }
 
@@ -163,7 +163,7 @@ test('backup: one before migrating a schema-4 database, none on the next start, 
   expect(readdirSync(backups)).toContain('readme.txt')
   const log = readFileSync(join(dataDir, 'logs', 'main.log'), 'utf8')
   expect(log).toContain(`backed up the database to ${join(backups, fresh[0]!)} before migrating`)
-  expect(log).toMatch(/schema version 4 before, 11 after migrating/)
+  expect(log).toMatch(/schema version 4 before, 12 after migrating/)
   const copy = new DatabaseSync(join(backups, fresh[0]!), { readOnly: true })
   expect(copy.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get()).toEqual({
     value: '4',
@@ -180,7 +180,7 @@ test('backup: one before migrating a schema-4 database, none on the next start, 
   const migrated = new DatabaseSync(join(dataDir, 'loam.db'), { readOnly: true })
   // Migrated all the way to the latest schema.
   expect(migrated.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get()).toEqual({
-    value: '11',
+    value: '12',
   })
   migrated.close()
 })
@@ -290,9 +290,9 @@ test('an attached note follows its image when it moves and when it leaves the bo
     image.y + 30 - note.y,
     true,
   )
-  const imageId = Number(await items(page).first().getAttribute('data-ref-id'))
+  const imageId = Number(await items(page).first().getAttribute('data-item-id'))
   await expect
-    .poll(async () => (await canvasView(page, boardId)).notes[0]?.attachedReferenceId)
+    .poll(async () => (await canvasView(page, boardId)).notes[0]?.attachedItemId)
     .toBe(imageId)
 
   // Move the image: the note moves by the same amount.
@@ -428,7 +428,7 @@ test('Ctrl+Z undoes group, ungroup, note create, note edit and attach, one step 
     true,
   )
   await expect
-    .poll(async () => (await canvasView(page, boardId)).notes[0]?.attachedReferenceId)
+    .poll(async () => (await canvasView(page, boardId)).notes[0]?.attachedItemId)
     .not.toBeNull()
   await undo(before)
 })

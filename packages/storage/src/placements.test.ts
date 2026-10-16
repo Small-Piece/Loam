@@ -66,11 +66,24 @@ describe('board placements', () => {
   }
 
   const canvas = (boardId: number) => service.getCanvas(boardId).items
+  /** The id of the (first) placement of a reference on a board. */
+  const itemOf = (boardId: number, referenceId: number | undefined) =>
+    canvas(boardId).find((item) => item.referenceId === referenceId)?.id
 
-  /** Saves item positions through the canvas edit path (groups unchanged: none here). */
+  /**
+   * Saves item positions through the canvas edit path (groups unchanged: none here).
+   * Each placement moves the reference's existing item on the board.
+   */
   const savePlacements = (boardId: number, placements: Placement[]) =>
     service.applyCanvas(boardId, [
-      { op: 'putItems', items: placements.map((placement) => ({ ...placement, groupId: null })) },
+      {
+        op: 'putItems',
+        items: placements.map((placement) => ({
+          ...placement,
+          id: itemOf(boardId, placement.referenceId),
+          groupId: null,
+        })),
+      },
     ])
 
   it('places imported images around the drop point, at most 600 units on the long side', async () => {
@@ -100,12 +113,12 @@ describe('board placements', () => {
     expect(second?.z).toBeGreaterThan(first?.z ?? 0)
   })
 
-  it('leaves an item where it is when it is added again', async () => {
+  it('leaves an item where it is when it is added again without a drop point', async () => {
     const board = service.createBoard('Zone 2')
     const [a] = await importIds([1])
     service.addToBoard(board.id, [a ?? -1], { x: 0, y: 0 })
     const before = canvas(board.id)
-    expect(service.addToBoard(board.id, [a ?? -1, 999], { x: 5000, y: 5000 })).toEqual([a])
+    expect(service.addToBoard(board.id, [a ?? -1, 999], null)).toEqual({ ids: [a], itemIds: [] })
     expect(canvas(board.id)).toEqual(before)
   })
 
@@ -131,7 +144,7 @@ describe('board placements', () => {
     const good = { referenceId: a ?? -1, x: 0, y: 0, scale: 1, z: 1 }
     expect(() => savePlacements(board.id, [{ ...good, scale: 0 }])).toThrow(/Invalid/)
     expect(() => savePlacements(board.id, [{ ...good, x: Number.NaN }])).toThrow(/Invalid/)
-    expect(() => savePlacements(board.id, [good, good])).toThrow(/twice/)
+    expect(() => savePlacements(board.id, [good, good])).toThrow(/appears twice/)
     expect(() => savePlacements(board.id, [{ ...good, referenceId: 999 }])).toThrow(/999/)
     expect(() => savePlacements(404, [good])).toThrow(/Board 404/)
     expect(canvas(board.id)).toEqual(before)

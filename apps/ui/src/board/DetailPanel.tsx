@@ -8,7 +8,9 @@ import {
 } from '@loam/protocol'
 import { call, onEvent } from '../api.ts'
 import { XIcon } from '../icons.tsx'
+import { ContextMenu, copyMenuItems } from './ContextMenu.tsx'
 import { TagEditor } from './TagEditor.tsx'
+import type { TagOption } from './tagPicker.ts'
 
 interface Props {
   id: number
@@ -16,6 +18,8 @@ interface Props {
   onClose: () => void
   /** Called after a save, so the grid can refresh titles and tags. */
   onSaved: () => void
+  /** Copies this reference's image to the clipboard. */
+  onCopy: () => void
   onError: (message: string) => void
 }
 
@@ -38,13 +42,15 @@ function formatDate(iso: string): string {
 }
 
 /** Full image plus editable fields. Text fields save on blur; tags and boards save at once. */
-export function DetailPanel({ id, boards, onClose, onSaved, onError }: Props) {
+export function DetailPanel({ id, boards, onClose, onSaved, onCopy, onError }: Props) {
   const [detail, setDetail] = useState<ReferenceDetail | null>(null)
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
   const [source, setSource] = useState('')
   const [uses, setUses] = useState<ResponseOf<'refs:bibleUses'>['uses']>([])
   const [suggestions, setSuggestions] = useState<TagSuggestionData[]>([])
+  const [allTags, setAllTags] = useState<TagOption[]>([])
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const reportError = useRef(onError)
   useEffect(() => {
     reportError.current = onError
@@ -65,6 +71,7 @@ export function DetailPanel({ id, boards, onClose, onSaved, onError }: Props) {
         if (cancelled) return
         show(response.detail)
         setSuggestions(response.suggestions)
+        setAllTags(response.allTags)
       })
       .catch((error: unknown) => reportError.current(String(error)))
     call('refs:bibleUses', { id })
@@ -86,7 +93,9 @@ export function DetailPanel({ id, boards, onClose, onSaved, onError }: Props) {
       done = status.queue.done
       call('refs:getDetail', { id })
         .then((response) => {
-          if (live) setSuggestions(response.suggestions)
+          if (!live) return
+          setSuggestions(response.suggestions)
+          setAllTags(response.allTags)
         })
         .catch(() => undefined)
     })
@@ -101,6 +110,7 @@ export function DetailPanel({ id, boards, onClose, onSaved, onError }: Props) {
       const response = await call('refs:acceptSuggestions', { id, tags })
       show(response.detail)
       setSuggestions(response.suggestions)
+      setAllTags(response.allTags)
       onSaved()
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error))
@@ -119,6 +129,7 @@ export function DetailPanel({ id, boards, onClose, onSaved, onError }: Props) {
     try {
       const response = await call('refs:update', { id, ...patch })
       show(response.detail)
+      setAllTags(response.allTags)
       onSaved()
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error))
@@ -145,11 +156,32 @@ export function DetailPanel({ id, boards, onClose, onSaved, onError }: Props) {
           height={detail.imageHeight}
           alt={detail.title}
           draggable={false}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            setMenu({ x: event.clientX, y: event.clientY })
+          }}
         />
         <button type="button" className="detail-close" aria-label="Close detail" onClick={onClose}>
           <XIcon size={12} />
         </button>
+        <button
+          type="button"
+          className="detail-copy"
+          title="Copy the full-size image (Ctrl+C)"
+          onClick={onCopy}
+        >
+          Copy image
+        </button>
       </div>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          label="Image actions"
+          items={copyMenuItems(1, onCopy)}
+          onClose={() => setMenu(null)}
+        />
+      )}
 
       <div className="detail-body">
         <label className="field">
@@ -185,7 +217,11 @@ export function DetailPanel({ id, boards, onClose, onSaved, onError }: Props) {
 
         <div className="field">
           <span className="f-lbl">Tags</span>
-          <TagEditor tags={detail.tags} onChange={(tags) => void save({ tags })} />
+          <TagEditor
+            tags={detail.tags}
+            options={allTags}
+            onChange={(tags) => void save({ tags })}
+          />
           {suggestions.length > 0 && (
             <div className="suggested-tags" role="group" aria-label="Suggested tags">
               {suggestions.map((item) => (

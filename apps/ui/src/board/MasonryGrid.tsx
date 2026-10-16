@@ -7,6 +7,8 @@ interface Props {
   isSelected: (id: number) => boolean
   onClickCard: (id: number, modifiers: ClickModifiers) => void
   onOpenCard: (id: number) => void
+  /** Right-click on a card (window coordinates of the pointer). */
+  onCardMenu: (id: number, x: number, y: number) => void
 }
 
 function modifiersOf(event: MouseEvent): ClickModifiers {
@@ -14,7 +16,7 @@ function modifiersOf(event: MouseEvent): ClickModifiers {
 }
 
 /** Masonry layout via CSS columns: each card keeps its image's aspect ratio. */
-export function MasonryGrid({ items, isSelected, onClickCard, onOpenCard }: Props) {
+export function MasonryGrid({ items, isSelected, onClickCard, onOpenCard, onCardMenu }: Props) {
   return (
     <div className="masonry">
       {items.map((item) => {
@@ -30,6 +32,10 @@ export function MasonryGrid({ items, isSelected, onClickCard, onOpenCard }: Prop
             aria-pressed={selected}
             onClick={(event) => onClickCard(item.id, modifiersOf(event))}
             onDoubleClick={() => onOpenCard(item.id)}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              onCardMenu(item.id, event.clientX, event.clientY)
+            }}
           >
             <img
               className="ref-card-thumb"

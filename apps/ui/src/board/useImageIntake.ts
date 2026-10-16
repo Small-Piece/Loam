@@ -12,6 +12,14 @@ export interface DropPoint {
   clientY: number
 }
 
+/** Text typed or pasted into a field belongs to the field. */
+function isEditable(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || target.matches('input, textarea, select'))
+  )
+}
+
 function hasFiles(event: DragEvent): boolean {
   return event.dataTransfer?.types.includes('Files') ?? false
 }
@@ -19,15 +27,21 @@ function hasFiles(event: DragEvent): boolean {
 /**
  * Listens for images dropped anywhere on the window and for pasted images
  * (Ctrl+V). Returns whether files are currently being dragged over the window.
+ * With onPasteFiles, every paste outside a text field goes there, also one without
+ * image files (the clipboard may hold Loam's own copy); otherwise pasted images
+ * go to onFiles.
  */
 export function useImageIntake(
   onFiles: (files: IncomingFile[], point: DropPoint | null) => void,
+  onPasteFiles?: (files: IncomingFile[]) => void,
 ): boolean {
   const [dragging, setDragging] = useState(false)
   const depth = useRef(0)
   const handler = useRef(onFiles)
+  const pasteHandler = useRef(onPasteFiles)
   useEffect(() => {
     handler.current = onFiles
+    pasteHandler.current = onPasteFiles
   })
 
   useEffect(() => {
@@ -65,13 +79,13 @@ export function useImageIntake(
       const images = [...(event.clipboardData?.files ?? [])].filter((file) =>
         file.type.startsWith('image/'),
       )
-      if (images.length === 0) return
-      event.preventDefault()
+      const paste = pasteHandler.current
+      if (images.length === 0 && (!paste || isEditable(event.target))) return
+      if (images.length > 0) event.preventDefault()
       const now = new Date()
-      handler.current(
-        images.map((file, index) => ({ file, fileName: pastedImageName(now, index) })),
-        null,
-      )
+      const files = images.map((file, index) => ({ file, fileName: pastedImageName(now, index) }))
+      if (paste) paste(files)
+      else handler.current(files, null)
     }
 
     window.addEventListener('dragenter', onDragEnter)

@@ -35,8 +35,8 @@ async function addTags(page: Page, title: string, tags: string[]): Promise<void>
   const detail = page.getByRole('complementary', { name: 'Reference detail' })
   await expect(detail.getByRole('textbox', { name: 'Title' })).toHaveValue(title)
   for (const tag of tags) {
-    await detail.getByRole('textbox', { name: 'Add tag' }).fill(tag)
-    await detail.getByRole('textbox', { name: 'Add tag' }).press('Enter')
+    await detail.getByRole('combobox', { name: 'Add tag' }).fill(tag)
+    await detail.getByRole('combobox', { name: 'Add tag' }).press('Enter')
     await expect(detail.getByRole('button', { name: `Remove tag ${tag}` })).toBeVisible()
   }
 }

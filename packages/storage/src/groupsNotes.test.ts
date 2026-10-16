@@ -44,7 +44,7 @@ const note = (overrides: Partial<NoteInput> = {}): NoteInput => ({
   color: 'paper',
   background: true,
   z: 50,
-  attachedReferenceId: null,
+  attachedItemId: null,
   groupId: null,
   ...overrides,
 })
@@ -296,7 +296,7 @@ describe('groups and notes', () => {
       return apply([
         {
           op: 'putNotes',
-          notes: [note({ key: 'n', x: 40, y: -60, attachedReferenceId: refs[0]! })],
+          notes: [note({ key: 'n', x: 40, y: -60, attachedItemId: item(refs[0]!)!.id })],
         },
       ]).created.notes['n']!
     }
@@ -317,18 +317,25 @@ describe('groups and notes', () => {
         { op: 'putItems', items: [{ ...item(refs[1]!)!, groupId: null, groupKey: 'g' }] },
         {
           op: 'putNotes',
-          notes: [note({ key: 'n', attachedReferenceId: refs[0]!, groupId: null, groupKey: 'g' })],
+          notes: [
+            note({ key: 'n', attachedItemId: item(refs[0]!)!.id, groupId: null, groupKey: 'g' }),
+          ],
         },
       ])
       expect(result.view.notes[0]?.groupId).toBeNull()
     })
 
     it('only attaches to an image that is on this board', async () => {
-      const [outside] = await service.importImages([upload(9)], null)
-      const outsideId = outside?.status === 'created' ? outside.id : -1
+      // A placement on another board, and an item id that does not exist.
+      const other = service.createBoard('Other')
+      await service.importImages([upload(9)], other.id)
+      const outsideItem = service.getCanvas(other.id).items[0]!.id
       expect(() =>
-        apply([{ op: 'putNotes', notes: [note({ attachedReferenceId: outsideId })] }]),
+        apply([{ op: 'putNotes', notes: [note({ attachedItemId: outsideItem })] }]),
       ).toThrow(/not on this board/)
+      expect(() =>
+        apply([{ op: 'putNotes', notes: [note({ attachedItemId: 999_999 })] }]),
+      ).toThrow()
     })
 
     it('removing the image from the board removes its note; undo brings both back', () => {
@@ -352,11 +359,11 @@ describe('groups and notes', () => {
         y: image.y + current.y * image.scale,
       }
       const { undo } = apply([
-        { op: 'putNotes', notes: [{ ...current, ...absolute, attachedReferenceId: null }] },
+        { op: 'putNotes', notes: [{ ...current, ...absolute, attachedItemId: null }] },
       ])
-      expect(canvas().notes[0]).toMatchObject({ ...absolute, attachedReferenceId: null })
+      expect(canvas().notes[0]).toMatchObject({ ...absolute, attachedItemId: null })
       apply(undo)
-      expect(canvas().notes[0]).toMatchObject({ x: 40, y: -60, attachedReferenceId: refs[0] })
+      expect(canvas().notes[0]).toMatchObject({ x: 40, y: -60, attachedItemId: image.id })
     })
 
     it('a note attached to an image in the Trash is hidden, and purged with it', async () => {

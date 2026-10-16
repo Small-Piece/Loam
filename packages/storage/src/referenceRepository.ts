@@ -11,6 +11,7 @@ import {
   type ImageHashMatch,
   type ImageSize,
   type ItemState,
+  type NewItem,
   type NoteSize,
   type PaletteColor,
   type NewReference,
@@ -91,11 +92,12 @@ interface NoteRow {
   color: string
   background: number
   z: number
-  attached_reference_id: number | null
+  attached_item_id: number | null
   group_id: number | null
 }
 
 interface CanvasRow {
+  id: number
   group_id: number | null
   reference_id: number
   x: number
@@ -114,14 +116,17 @@ interface CanvasRow {
   image_height: number
 }
 
+/** A board's count is the number of references on it: an image placed twice counts once. */
 const BOARD_SUMMARY = `SELECT b.id, b.name, b.view_mode AS viewMode,
-    (SELECT COUNT(*) FROM board_items bi JOIN refs r ON r.id = bi.reference_id
+    (SELECT COUNT(DISTINCT bi.reference_id) FROM board_items bi JOIN refs r ON r.id = bi.reference_id
      WHERE bi.board_id = b.id AND r.deleted_at IS NULL) AS count
   FROM boards b`
 
+const ITEM_STATE = 'id, reference_id AS referenceId, x, y, scale, z, group_id AS groupId'
+
 /**
  * SQLite implementation of the reference repository
- * (schema: migrations 0002_references, 0003_trash and 0004_board_items).
+ * (schema: migrations 0002_references, 0003_trash, 0004_board_items and 0012_board_item_ids).
  */
 export class SqliteReferenceRepository implements ReferenceRepository {
   private readonly db: Database
@@ -162,16 +167,33 @@ export class SqliteReferenceRepository implements ReferenceRepository {
     this.db.transaction(() => {
       for (const part of chunks(refIds)) {
         const { list, params } = idParams(part)
-        // Notes attached to these images on this board leave with them.
+        const itemIds = this.db
+          .prepare(
+            `SELECT id FROM board_items WHERE board_id = @boardId AND reference_id IN (${list})`,
+          )
+          .pluck()
+          .all({ ...params, boardId }) as number[]
+        removed.push(...this.removeItems(boardId, itemIds))
+      }
+    })()
+    return removed
+  }
+
+  removeItems(boardId: number, itemIds: readonly number[]): ItemState[] {
+    const removed: ItemState[] = []
+    this.db.transaction(() => {
+      for (const part of chunks(itemIds)) {
+        const { list, params } = idParams(part)
+        // Notes attached to these placements leave with them (also ON DELETE CASCADE).
         this.db
           .prepare(
-            `DELETE FROM board_notes WHERE board_id = @boardId AND attached_reference_id IN (${list})`,
+            `DELETE FROM board_notes WHERE board_id = @boardId AND attached_item_id IN (${list})`,
           )
           .run({ ...params, boardId })
         const rows = this.db
           .prepare(
-            `DELETE FROM board_items WHERE board_id = @boardId AND reference_id IN (${list})
-             RETURNING reference_id AS referenceId, x, y, scale, z, group_id AS groupId`,
+            `DELETE FROM board_items WHERE board_id = @boardId AND id IN (${list})
+             RETURNING ${ITEM_STATE}`,
           )
           .all({ ...params, boardId }) as ItemState[]
         removed.push(...rows)
@@ -180,17 +202,49 @@ export class SqliteReferenceRepository implements ReferenceRepository {
     return removed
   }
 
-  upsertItems(boardId: number, items: readonly ItemState[]): void {
-    const upsert = this.db.prepare(
+  putItems(boardId: number, items: ReadonlyArray<NewItem | ItemState>): number[] {
+    const insert = this.db.prepare(
       `INSERT INTO board_items (board_id, reference_id, x, y, scale, z, group_id)
-       VALUES (@boardId, @referenceId, @x, @y, @scale, @z, @groupId)
-       ON CONFLICT (board_id, reference_id)
+       VALUES (@boardId, @referenceId, @x, @y, @scale, @z, @groupId)`,
+    )
+    // With an id: update that placement, or put it back under the same id (undo of a removal).
+    const upsert = this.db.prepare(
+      `INSERT INTO board_items (id, board_id, reference_id, x, y, scale, z, group_id)
+       VALUES (@id, @boardId, @referenceId, @x, @y, @scale, @z, @groupId)
+       ON CONFLICT (id)
        DO UPDATE SET x = excluded.x, y = excluded.y, scale = excluded.scale, z = excluded.z,
          group_id = excluded.group_id`,
     )
+    const ids: number[] = []
     this.db.transaction(() => {
-      for (const item of items) upsert.run({ ...item, boardId })
+      for (const item of items) {
+        const values = {
+          boardId,
+          referenceId: item.referenceId,
+          x: item.x,
+          y: item.y,
+          scale: item.scale,
+          z: item.z,
+          groupId: item.groupId,
+        }
+        if (item.id === undefined) {
+          ids.push(Number(insert.run(values).lastInsertRowid))
+        } else {
+          upsert.run({ ...values, id: item.id })
+          ids.push(item.id)
+        }
+      }
     })()
+    return ids
+  }
+
+  itemOwner(itemId: number): { boardId: number; referenceId: number } | null {
+    const row = this.db
+      .prepare(
+        'SELECT board_id AS boardId, reference_id AS referenceId FROM board_items WHERE id = ?',
+      )
+      .get(itemId) as { boardId: number; referenceId: number } | undefined
+    return row ?? null
   }
 
   listGroups(boardId: number): BoardGroup[] {
@@ -210,14 +264,14 @@ export class SqliteReferenceRepository implements ReferenceRepository {
 
   listNotes(boardId: number, includeTrashed: boolean): BoardNote[] {
     // A note attached to an image in the Trash is hidden with it.
-    const trash = includeTrashed
-      ? ''
-      : 'AND (n.attached_reference_id IS NULL OR r.deleted_at IS NULL)'
+    const trash = includeTrashed ? '' : 'AND (n.attached_item_id IS NULL OR r.deleted_at IS NULL)'
     const rows = this.db
       .prepare(
         `SELECT n.id, n.text, n.x, n.y, n.width, n.font_size, n.color, n.background, n.z,
-           n.attached_reference_id, n.group_id
-         FROM board_notes n LEFT JOIN refs r ON r.id = n.attached_reference_id
+           n.attached_item_id, n.group_id
+         FROM board_notes n
+         LEFT JOIN board_items bi ON bi.id = n.attached_item_id
+         LEFT JOIN refs r ON r.id = bi.reference_id
          WHERE n.board_id = ? ${trash}
          ORDER BY n.z, n.id`,
       )
@@ -232,7 +286,7 @@ export class SqliteReferenceRepository implements ReferenceRepository {
       color: row.color as PaletteColor,
       background: row.background === 1,
       z: row.z,
-      attachedReferenceId: row.attached_reference_id,
+      attachedItemId: row.attached_item_id,
       groupId: row.group_id,
     }))
   }
@@ -299,11 +353,11 @@ export class SqliteReferenceRepository implements ReferenceRepository {
       color: note.color,
       background: note.background ? 1 : 0,
       z: note.z,
-      attached: note.attachedReferenceId,
+      attached: note.attachedItemId,
       groupId: note.groupId,
     }
     const columns = `board_id, text, x, y, width, font_size, color, background, z,
-      attached_reference_id, group_id`
+      attached_item_id, group_id`
     const placeholders = `@boardId, @text, @x, @y, @width, @fontSize, @color, @background, @z,
       @attached, @groupId`
     if (note.id === undefined) {
@@ -318,7 +372,7 @@ export class SqliteReferenceRepository implements ReferenceRepository {
          ON CONFLICT (id) DO UPDATE SET text = excluded.text, x = excluded.x, y = excluded.y,
            width = excluded.width, font_size = excluded.font_size, color = excluded.color,
            background = excluded.background, z = excluded.z,
-           attached_reference_id = excluded.attached_reference_id, group_id = excluded.group_id`,
+           attached_item_id = excluded.attached_item_id, group_id = excluded.group_id`,
       )
       .run({ ...values, id: note.id })
     return note.id
@@ -352,16 +406,17 @@ export class SqliteReferenceRepository implements ReferenceRepository {
     const trash = includeTrashed ? '' : 'AND r.deleted_at IS NULL'
     const rows = this.db
       .prepare(
-        `SELECT bi.reference_id, bi.x, bi.y, bi.scale, bi.z, bi.rotation, bi.flip_x, bi.flip_y,
-           bi.group_id,
+        `SELECT bi.id, bi.reference_id, bi.x, bi.y, bi.scale, bi.z, bi.rotation, bi.flip_x,
+           bi.flip_y, bi.group_id,
            r.title, r.thumb_hash, r.thumb_width, r.thumb_height,
            r.image_hash, r.image_width, r.image_height
          FROM board_items bi JOIN refs r ON r.id = bi.reference_id
          WHERE bi.board_id = ? ${trash}
-         ORDER BY bi.z, bi.reference_id`,
+         ORDER BY bi.z, bi.id`,
       )
       .all(boardId) as CanvasRow[]
     return rows.map((row) => ({
+      id: row.id,
       referenceId: row.reference_id,
       groupId: row.group_id,
       x: row.x,
@@ -474,7 +529,7 @@ export class SqliteReferenceRepository implements ReferenceRepository {
         `SELECT r.id, r.title, r.note, r.source, r.created_at, r.image_hash, r.image_mime,
            r.image_bytes, r.image_width, r.image_height, r.deleted_at, ${TAGS_OF_REF} AS tags,
            (SELECT json_group_array(board_id) FROM (
-              SELECT board_id FROM board_items WHERE reference_id = r.id ORDER BY board_id)) AS board_ids
+              SELECT DISTINCT board_id FROM board_items WHERE reference_id = r.id ORDER BY board_id)) AS board_ids
          FROM refs r WHERE r.id = ?`,
       )
       .get(id) as DetailRow | undefined
@@ -662,6 +717,18 @@ export class SqliteReferenceRepository implements ReferenceRepository {
       imageMime: string
       thumbHash: string
     }>
+  }
+
+  libraryTags(): TagCount[] {
+    return this.db
+      .prepare(
+        `SELECT t.name AS name, COUNT(*) AS count FROM ref_tags rt
+         JOIN tags t ON t.id = rt.tag_id
+         JOIN refs r ON r.id = rt.ref_id
+         WHERE r.deleted_at IS NULL
+         GROUP BY t.id ORDER BY count DESC, t.name`,
+      )
+      .all() as TagCount[]
   }
 
   tagNames(): string[] {

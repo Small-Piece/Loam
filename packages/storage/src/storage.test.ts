@@ -7,7 +7,7 @@ import { loadMigrations, openDatabase } from './index.ts'
 
 const repoMigrations = fileURLToPath(new URL('../../../migrations', import.meta.url))
 // 0001_init through 0005_groups_notes.
-const LATEST_VERSION = 11
+const LATEST_VERSION = 12
 
 describe('storage', () => {
   const dirs: string[] = []

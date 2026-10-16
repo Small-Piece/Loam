@@ -10,6 +10,7 @@ import {
 } from '@loam/core'
 import type { Handlers, ResponseOf } from '@loam/protocol'
 import type { AiController } from './ai/controller.ts'
+import { isShareable, type ClipboardPort } from './clipboardPort.ts'
 
 export interface HandlerDeps {
   clock: Clock
@@ -33,6 +34,10 @@ export interface HandlerDeps {
   suggestions: SuggestionService
   /** The local AI helpers (off by default). */
   ai: AiController
+  /** The system clipboard (copy images out, recognise Loam's own copy on paste). */
+  clipboard: ClipboardPort
+  /** Bytes of a stored file in the content-addressed store. */
+  readBlob: (hash: string) => Promise<Uint8Array<ArrayBuffer>>
 }
 
 /** Backend handlers for every protocol message; each maps to one core use case. */
@@ -49,6 +54,8 @@ export function createHandlers({
   openExternal,
   suggestions,
   ai,
+  clipboard,
+  readBlob,
 }: HandlerDeps): Handlers {
   /** The service that has this vault open: the journal's, or else the bible's. */
   const vaults = (vaultId: number): BibleService => (journal.owns(vaultId) ? journal : bible)
@@ -63,6 +70,7 @@ export function createHandlers({
     'refs:getDetail': (request) => ({
       detail: references.getDetail(request.id),
       suggestions: suggestions.list(request.id),
+      allTags: references.libraryTags(),
     }),
     'refs:import': async (request) => {
       const results = await references.importImages(request.items, request.boardId, request.at)
@@ -73,6 +81,7 @@ export function createHandlers({
     'refs:acceptSuggestions': (request) => ({
       detail: suggestions.accept(request.id, request.tags),
       suggestions: suggestions.list(request.id),
+      allTags: references.libraryTags(),
     }),
     'refs:rejectSuggestion': (request) => {
       suggestions.reject(request.id, request.tag)
@@ -114,7 +123,8 @@ ${source.text}`,
       journal.saveRecap(request.vaultId, request.title, request.text, request.sourceIds),
     'refs:update': (request) => {
       const { id, ...patch } = request
-      return { detail: references.update(id, patch) }
+      const detail = references.update(id, patch)
+      return { detail, allTags: references.libraryTags() }
     },
     'boards:create': (request) => ({ board: references.createBoard(request.name) }),
     'boards:reorder': (request) => ({ boards: references.reorderBoards(request.ids) }),
@@ -125,9 +135,20 @@ ${source.text}`,
       const { removed, undo } = references.removeFromBoard(request.boardId, request.ids)
       return { ids: removed, undo }
     },
-    'boards:addRefs': (request) => ({
-      ids: references.addToBoard(request.boardId, request.ids, request.at),
-    }),
+    'boards:addRefs': (request) => references.addToBoard(request.boardId, request.ids, request.at),
+    'refs:copyImages': async (request) => {
+      const plan = references.prepareCopy(request.ids, isShareable)
+      if (plan.ids.length === 0) return { ids: [], sharedId: null }
+      const image = plan.shared
+        ? { bytes: await readBlob(plan.shared.imageHash), mime: plan.shared.imageMime }
+        : null
+      await clipboard.writeCopy(image, plan.mark)
+      return { ids: plan.ids, sharedId: plan.shared?.id ?? null }
+    },
+    'refs:pasteCopied': async (request) => {
+      const { mark, hasImage } = await clipboard.readMark()
+      return references.pasteCopied(mark, hasImage, request.boardId, request.at)
+    },
     'boards:setViewMode': (request) => ({
       mode: references.setViewMode(request.boardId, request.mode),
     }),

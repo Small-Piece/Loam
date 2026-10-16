@@ -871,6 +871,7 @@ export function EntryEditor({
             version={0}
             onBoard={NO_BOARD}
             onError={onError}
+            onNotice={onNotice}
             hint="Drag onto the entry to add."
           />
         </aside>

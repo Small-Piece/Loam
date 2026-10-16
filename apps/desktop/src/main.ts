@@ -48,7 +48,8 @@ import {
   oldDataDir,
   starterKitsDir,
 } from './paths.ts'
-import { chooseDisplay, placeOn, type Placement } from './windowPlacement.ts'
+import { systemClipboard } from './clipboard.ts'
+import { chooseAnchor, chooseDisplay, placeOn, type Placement } from './windowPlacement.ts'
 
 // The dev server URL is honoured only in an unpackaged build, so an installed
 // app can never be pointed at another origin through the environment.
@@ -76,8 +77,9 @@ let showsInactive = false
 /**
  * LOAM_WINDOW_DISPLAY ("secondary" or a display index; the old UM_WINDOW_DISPLAY
  * also works) puts the window on another monitor and shows it without focus, so
- * test runs stay off the main screen. Unset, or naming a display that does not
- * exist, keeps the normal behavior.
+ * test runs stay off the main screen. LOAM_WINDOW_ANCHOR=bottom then keeps the
+ * window at the bottom of that display instead of its center. Unset, or naming
+ * a display that does not exist, keeps the normal behavior.
  */
 function placementFromEnvironment(): Placement | null {
   const display = chooseDisplay(
@@ -85,7 +87,7 @@ function placementFromEnvironment(): Placement | null {
     screen.getAllDisplays(),
     screen.getPrimaryDisplay().id,
   )
-  return display ? placeOn(display, WINDOW_SIZE) : null
+  return display ? placeOn(display, WINDOW_SIZE, chooseAnchor(envSetting('WINDOW_ANCHOR'))) : null
 }
 
 function createWindow(): BrowserWindow {
@@ -106,6 +108,9 @@ function createWindow(): BrowserWindow {
   // A file dropped outside the drop zone must not navigate the window away.
   window.webContents.on('will-navigate', (event) => event.preventDefault())
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  // Created on one monitor and moved to another with a different scale, Windows
+  // rescales the window by a few pixels; once it is there, set the bounds again.
+  if (placement) window.setBounds(placement.bounds)
   window.once('ready-to-show', () => {
     if (placement?.inactive) window.showInactive()
     else window.show()
@@ -351,6 +356,8 @@ async function start(): Promise<void> {
     openExternal,
     suggestions: new SuggestionService({ references, suggestions: suggestionStore }),
     ai,
+    clipboard: systemClipboard,
+    readBlob: async (hash) => new Uint8Array(await blobs.read(hash)),
   })
   ipcMain.handle(INVOKE_CHANNEL, (_event, channel: unknown, payload: unknown) =>
     dispatch(handlers, channel, payload),

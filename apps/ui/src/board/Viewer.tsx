@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react'
 import { assetUrl, type ReferenceCard } from '@loam/protocol'
 import { XIcon } from '../icons.tsx'
+import { ContextMenu, copyMenuItems } from './ContextMenu.tsx'
 
 interface Props {
   items: ReferenceCard[]
@@ -8,6 +9,8 @@ interface Props {
   /** performance.now() of the click or key press that opened the viewer. */
   openedAt: number
   onIndexChange: (index: number) => void
+  /** Ctrl+C or right-click → Copy image: copies the image shown. */
+  onCopy: (item: ReferenceCard) => void
   onClose: () => void
 }
 
@@ -29,11 +32,11 @@ function clamp(value: number, min: number, max: number): number {
 
 /**
  * Full-screen image viewer. Wheel zooms around the cursor, dragging pans,
- * 0 fits, 1 shows 100 %, arrow keys step through the current list, Esc or
- * Space closes. The transform is applied directly on the DOM in an animation
+ * 0 fits, 1 shows 100 %, arrow keys step through the current list, Ctrl+C
+ * copies the image, Esc or Space closes. The transform is applied directly on the DOM in an animation
  * frame, so zooming never waits for React.
  */
-export function Viewer({ items, index, openedAt, onIndexChange, onClose }: Props) {
+export function Viewer({ items, index, openedAt, onIndexChange, onCopy, onClose }: Props) {
   const item = items[index]
   const stage = useRef<HTMLDivElement>(null)
   const image = useRef<HTMLImageElement>(null)
@@ -44,6 +47,7 @@ export function Viewer({ items, index, openedAt, onIndexChange, onClose }: Props
   const [zoomLabel, setZoomLabel] = useState('')
   const [loadedHash, setLoadedHash] = useState<string | null>(null)
   const [openMs, setOpenMs] = useState<number | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
 
   /** Writes the current view to the image element right away. */
   const applyNow = useCallback(() => {
@@ -147,9 +151,13 @@ export function Viewer({ items, index, openedAt, onIndexChange, onClose }: Props
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      // The right-click menu takes its own keys (arrows, Escape closes only the menu).
+      if (menu) return
       const el = stage.current
       let handled = true
-      if (event.key === 'Escape' || event.key === ' ') onClose()
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') {
+        if (item) onCopy(item)
+      } else if (event.key === 'Escape' || event.key === ' ') onClose()
       else if (event.key === '0') fit()
       else if (event.key === '1' && el) {
         zoomAt(1, el.clientWidth / 2, el.clientHeight / 2)
@@ -164,7 +172,7 @@ export function Viewer({ items, index, openedAt, onIndexChange, onClose }: Props
     }
     window.addEventListener('keydown', onKeyDown, { capture: true })
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
-  }, [fit, zoomAt, index, items.length, onClose, onIndexChange])
+  }, [fit, zoomAt, index, item, items.length, menu, onClose, onCopy, onIndexChange])
 
   useEffect(() => {
     const el = stage.current
@@ -235,6 +243,10 @@ export function Viewer({ items, index, openedAt, onIndexChange, onClose }: Props
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          setMenu({ x: event.clientX, y: event.clientY })
+        }}
       >
         <img
           ref={image}
@@ -256,11 +268,22 @@ export function Viewer({ items, index, openedAt, onIndexChange, onClose }: Props
       </div>
       <div className="viewer-hud viewer-hud-bottom mono">
         <span data-testid="viewer-zoom">{zoomLabel}</span>
-        <span className="viewer-keys">Wheel zoom · Drag pan · 0 fit · 1 100% · ← → · Esc</span>
+        <span className="viewer-keys">
+          Wheel zoom · Drag pan · 0 fit · 1 100% · ← → · Ctrl+C copy · Esc
+        </span>
       </div>
       <button type="button" className="viewer-close" aria-label="Close viewer" onClick={onClose}>
         <XIcon size={14} />
       </button>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          label="Image actions"
+          items={copyMenuItems(1, () => onCopy(item))}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
   )
 }

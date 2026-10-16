@@ -1,5 +1,6 @@
 import type { BlobStore, Clock, Hasher, ReferenceRepository } from './ports.ts'
 import { applyOps, CanvasEditError, inverseOps, snapshotBoard } from './canvasEdit.ts'
+import { encodeClipboardMark, parseClipboardMark } from './clipboardMark.ts'
 import { layoutNewItems } from './layout.ts'
 import { LIMITS, normalizeTags, sniffImageMime, titleFromFileName } from './rules.ts'
 import type {
@@ -16,6 +17,7 @@ import type {
   Point,
   ReferenceDetail,
   ReferencePatch,
+  TagCount,
 } from './types.ts'
 
 export interface ReferenceServiceDeps {
@@ -27,6 +29,16 @@ export interface ReferenceServiceDeps {
 
 export class DomainError extends Error {
   override name = 'DomainError'
+}
+
+/** What one copy puts on the clipboard. */
+export interface CopyPlan {
+  /** The references copied: those asked for that are in the Library, in the order given. */
+  ids: number[]
+  /** The image other apps receive (the first one that can be shared), or null. */
+  shared: { id: number; imageHash: string; imageMime: string } | null
+  /** Loam's private marker, written next to the image. */
+  mark: string
 }
 
 function validDimension(value: number): boolean {
@@ -79,6 +91,7 @@ export class ReferenceService {
    * reference is in the Trash, it is restored with its tags and boards.
    * When boardId is given, every imported or matched reference joins that
    * board, placed around `at` (a canvas point) or below the existing items.
+   * With `at`, an image already on the board is placed there once more.
    */
   importImages(
     uploads: readonly ImageUpload[],
@@ -226,35 +239,47 @@ export class ReferenceService {
   }
 
   /**
-   * Takes references off one board; they stay in the Library and on other
-   * boards. Notes attached to them on this board go too. Returns the ids
-   * that were on the board and the steps that undo the removal exactly.
+   * Takes references off one board, every placement of them there; they stay
+   * in the Library and on other boards. Notes attached to those placements go
+   * too. Returns the ids that were on the board and the steps that undo the
+   * removal exactly.
    */
   removeFromBoard(
     boardId: number,
     ids: readonly number[],
   ): { removed: number[]; undo: CanvasOp[] } {
     this.requireBoard(boardId)
-    const unique = [...new Set(ids)]
-    const before = new Set(
-      this.deps.repository.listCanvas(boardId, true).map((item) => item.referenceId),
-    )
-    const { undo } = this.applyCanvas(boardId, [{ op: 'removeItems', referenceIds: unique }])
-    return { removed: unique.filter((id) => before.has(id)), undo }
+    const unique = new Set(ids)
+    const placements = this.deps.repository
+      .listCanvas(boardId, true)
+      .filter((item) => unique.has(item.referenceId))
+    const { undo } = this.applyCanvas(boardId, [
+      { op: 'removeItems', itemIds: placements.map((item) => item.id) },
+    ])
+    const removed = new Set(placements.map((item) => item.referenceId))
+    return { removed: [...unique].filter((id) => removed.has(id)), undo }
   }
 
   /**
-   * Places references on a board: around `at` when given, otherwise below
-   * what is already there. References already on the board stay where they
-   * are. Returns the ids that are on the board afterwards.
+   * Places references on a board. Around `at` (a drop point) every one of
+   * them gets a new placement, also when it is on the board already, so an
+   * image can be placed several times. Without `at` they go below what is
+   * there, and references already on the board stay as they are. Returns the
+   * reference ids on the board afterwards and the ids of the new placements.
    */
-  addToBoard(boardId: number, ids: readonly number[], at: Point | null): number[] {
+  addToBoard(
+    boardId: number,
+    ids: readonly number[],
+    at: Point | null,
+  ): { ids: number[]; itemIds: number[] } {
     const { repository } = this.deps
     this.requireBoard(boardId)
     const current = repository.listCanvas(boardId, true)
     const placed = new Set(current.map((item) => item.referenceId))
     const wanted = [...new Set(ids)]
-    const sizes = repository.imageSizes(wanted.filter((id) => !placed.has(id)))
+    const sizes = repository.imageSizes(
+      at === null ? wanted.filter((id) => !placed.has(id)) : wanted,
+    )
     const sizeOrder = new Map(wanted.map((id, index) => [id, index]))
     sizes.sort((a, b) => (sizeOrder.get(a.referenceId) ?? 0) - (sizeOrder.get(b.referenceId) ?? 0))
     const rects = current.map((item) => ({
@@ -271,12 +296,12 @@ export class ReferenceService {
       ...repository.listNotes(boardId, true).map((note) => note.z),
     )
     const placements = layoutNewItems(rects, sizes, at, topZ + 1)
-    repository.upsertItems(
+    const itemIds = repository.putItems(
       boardId,
       placements.map((placement) => ({ ...placement, groupId: null })),
     )
     const known = new Set(sizes.map((size) => size.referenceId))
-    return wanted.filter((id) => placed.has(id) || known.has(id))
+    return { ids: wanted.filter((id) => placed.has(id) || known.has(id)), itemIds }
   }
 
   /**
@@ -333,9 +358,74 @@ export class ReferenceService {
     return this.deps.repository.assetInfo(ids)
   }
 
+  /**
+   * Plans a copy of references to the clipboard. References in the Trash or gone
+   * are left out. Other apps get the first image whose format `shareable`
+   * accepts; Loam's marker lists every copied reference with its image hash.
+   */
+  prepareCopy(ids: readonly number[], shareable: (mime: string) => boolean): CopyPlan {
+    const wanted = [...new Set(ids)]
+    const byId = new Map(this.deps.repository.assetInfo(wanted).map((info) => [info.id, info]))
+    const copied = wanted.flatMap((id) => {
+      const info = byId.get(id)
+      return info ? [info] : []
+    })
+    const first = copied.find((info) => shareable(info.imageMime))
+    const shared = first
+      ? { id: first.id, imageHash: first.imageHash, imageMime: first.imageMime }
+      : null
+    const mark = encodeClipboardMark({
+      refs: copied.map((info) => ({ id: info.id, imageHash: info.imageHash })),
+      shared: shared?.imageHash ?? null,
+    })
+    return { ids: copied.map((info) => info.id), shared, mark }
+  }
+
+  /**
+   * The references a paste should reuse, in the order they were copied: those in
+   * Loam's marker that are still in the Library with the same image. Empty when
+   * the clipboard holds no marker (another app copied since), the marker named an
+   * image that is no longer on the clipboard, or no marked reference is left.
+   */
+  copiedReferences(markText: string | null, clipboardHasImage: boolean): number[] {
+    const mark = parseClipboardMark(markText)
+    if (mark === null) return []
+    if (mark.shared !== null && !clipboardHasImage) return []
+    const ids = mark.refs.map((ref) => ref.id)
+    const current = new Map(
+      this.deps.repository.assetInfo(ids).map((info) => [info.id, info.imageHash]),
+    )
+    return mark.refs.flatMap((ref) => (current.get(ref.id) === ref.imageHash ? [ref.id] : []))
+  }
+
+  /**
+   * Pastes Loam's own copy: on a canvas (`at` given) the references get new
+   * placements around that point; on a board without a point they join it if
+   * they are not on it yet; in the Library nothing is imported. Returns empty
+   * ids when the clipboard is not Loam's copy, so the normal paste runs instead.
+   */
+  pasteCopied(
+    markText: string | null,
+    clipboardHasImage: boolean,
+    boardId: number | null,
+    at: Point | null,
+  ): { ids: number[]; itemIds: number[] } {
+    const ids = this.copiedReferences(markText, clipboardHasImage)
+    if (ids.length === 0 || boardId === null) return { ids, itemIds: [] }
+    return { ids, itemIds: this.addToBoard(boardId, ids, at).itemIds }
+  }
+
   /** Every tag in use in the Library, by name; the Bible offers them in its tag field. */
   tagNames(): string[] {
     return this.deps.repository.tagNames()
+  }
+
+  /**
+   * Every tag in the Library with its use count, whatever board is open; references in
+   * the Trash do not count. The tag picker offers these.
+   */
+  libraryTags(): TagCount[] {
+    return this.deps.repository.libraryTags()
   }
 
   /** Creates a board, or returns the existing one with the same name (case-insensitive). */

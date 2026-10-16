@@ -89,7 +89,7 @@ export function ObjectToolbar({
           </button>
           {notes.length === 1 && (
             <button type="button" className="btn ghost" onClick={onAttachToggle}>
-              {note.attachedReferenceId === null ? 'Attach to image' : 'Detach'}
+              {note.attachedItemId === null ? 'Attach to image' : 'Detach'}
             </button>
           )}
         </>
